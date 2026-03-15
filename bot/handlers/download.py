@@ -112,17 +112,19 @@ async def download_audio(callback: CallbackQuery, state: FSMContext) -> None:
     url = data.get("url")
     await state.clear()
 
+    # отвечаем на callback СРАЗУ (Telegram даёт 30 сек)
+    await callback.answer()
+
     if not url:
-        await callback.answer("❌ Ссылка не найдена, отправь заново")
+        await callback.message.answer("❌ Ссылка не найдена, отправь заново")
         return
 
     async with async_session() as session:
         lang = await get_user_language(session, callback.from_user.id)
 
     await _process_download(
-        callback.message, url, "audio", callback.from_user, lang
+        callback.message, url, "audio", callback.from_user, lang, state
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("quality_"))
@@ -133,8 +135,11 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
     url = data.get("url")
     await state.clear()
 
+    # отвечаем на callback СРАЗУ (Telegram даёт 30 сек)
+    await callback.answer()
+
     if not url:
-        await callback.answer("❌ Ссылка не найдена, отправь заново")
+        await callback.message.answer("❌ Ссылка не найдена, отправь заново")
         return
 
     async with async_session() as session:
@@ -142,9 +147,8 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
 
     format_key = f"video_{quality}"
     await _process_download(
-        callback.message, url, format_key, callback.from_user, lang
+        callback.message, url, format_key, callback.from_user, lang, state
     )
-    await callback.answer()
 
 
 async def _process_download(
@@ -153,6 +157,7 @@ async def _process_download(
     format_key: str,
     user,
     lang: str = "ru",
+    state: FSMContext | None = None,
 ) -> None:
     """Скачивает и отправляет медиа"""
     # проверяем кэш
@@ -223,14 +228,18 @@ async def _process_download(
             reply_markup=get_audio_suggest_keyboard(lang),
             parse_mode="HTML",
         )
-        # восстанавливаем FSM с URL для кнопки "Скачать аудио"
-        from aiogram.fsm.context import FSMContext
-        # нельзя восстановить state из message, поэтому запоминаем URL в callback_data
-        # не идеально, но URL уже есть в сообщении
+        # восстанавливаем FSM с URL чтобы кнопка "Скачать аудио" работала
+        if state:
+            await state.set_state(DownloadStates.waiting_format)
+            await state.update_data(url=url)
+
     except Exception as e:
         logger.error(f"Ошибка скачивания {url}: {e}")
         error_text = _get_error_text(str(e), lang)
-        await status_msg.edit_text(error_text)
+        try:
+            await status_msg.edit_text(error_text)
+        except Exception:
+            await message.answer(error_text)
 
     finally:
         if result:
