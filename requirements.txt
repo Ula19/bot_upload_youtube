@@ -9,3 +9,7 @@ pydantic-settings==2.8.1
 # Утилиты
 aiofiles==24.1.0
 python-dotenv==1.0.1
+
+# Отправка больших файлов (> 50 МБ) через MTProto
+Telethon==1.39.0
+cryptg==0.4.0

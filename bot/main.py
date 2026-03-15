@@ -55,6 +55,10 @@ async def main() -> None:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Таблицы БД созданы")
 
+        # запускаем Telethon (для отправки больших файлов)
+        from bot.services import telethon_sender
+        await telethon_sender.init_telethon()
+
         # проверяем crash recovery
         if os.path.exists(CRASH_FLAG):
             logger.warning("Обнаружен crash-flag — предыдущий запуск завершился аварийно")
@@ -69,6 +73,10 @@ async def main() -> None:
 
     @dp.shutdown()
     async def on_shutdown() -> None:
+        # останавливаем Telethon
+        from bot.services import telethon_sender
+        await telethon_sender.stop_telethon()
+
         # убираем crash-flag при нормальном завершении
         if os.path.exists(CRASH_FLAG):
             os.remove(CRASH_FLAG)

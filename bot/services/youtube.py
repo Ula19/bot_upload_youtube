@@ -34,6 +34,7 @@ class DownloadResult:
     duration: int | None = None
     format_key: str = ""  # video_360, video_720, audio
     was_downgraded: bool = False  # понижено ли качество автоматически
+    needs_telethon: bool = False  # нужно ли отправлять через Telethon
 
 
 class YouTubeDownloader:
@@ -68,31 +69,35 @@ class YouTubeDownloader:
     async def download_video(
         self, url: str, quality: str = "720"
     ) -> DownloadResult:
-        """Скачивает видео с автопонижением качества
-        quality: "360" или "720"
+        """Скачивает видео. Если Telethon включён — без ограничений.
+        Если нет — автопонижение качества при > 50 МБ.
         """
-        was_downgraded = False
+        from bot.config import settings
 
-        # пробуем скачать в выбранном качестве
+        # скачиваем в выбранном качестве
         result = await self._download_with_quality(url, quality)
-
-        # проверяем размер — если больше лимита, понижаем
         file_size = os.path.getsize(result.file_path)
 
+        # если Telethon включён — файлы до 2 ГБ пройдут
+        if settings.telethon_enabled:
+            if file_size > 2 * 1024 * 1024 * 1024:
+                self._remove_file(result.file_path)
+                raise FileTooLargeError("Видео больше 2 ГБ")
+            # помечаем что нужно отправить через Telethon
+            result.needs_telethon = file_size > MAX_FILE_SIZE
+            return result
+
+        # без Telethon — старая логика с автопонижением
         if file_size > MAX_FILE_SIZE and quality == "720":
             logger.info(
                 f"Файл {file_size / 1024 / 1024:.1f} МБ > 50 МБ, "
                 f"понижаю качество до 360p"
             )
-            # удаляем тяжёлый файл
             self._remove_file(result.file_path)
-            # скачиваем в 360p
             result = await self._download_with_quality(url, "360")
             result.was_downgraded = True
-            was_downgraded = True
             file_size = os.path.getsize(result.file_path)
 
-        # если и 360p не влезает — возвращаем None (хэндлер предложит аудио)
         if file_size > MAX_FILE_SIZE:
             self._remove_file(result.file_path)
             raise FileTooLargeError(
@@ -100,7 +105,6 @@ class YouTubeDownloader:
                 f"({file_size / 1024 / 1024:.0f} МБ)"
             )
 
-        result.was_downgraded = was_downgraded
         return result
 
     async def download_audio(self, url: str) -> DownloadResult:

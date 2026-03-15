@@ -17,11 +17,20 @@ class Settings(BaseSettings):
     admin_ids: str = ""
     admin_username: str = "admin"
 
+    # Telegram API (для Telethon — отправка файлов > 50 МБ)
+    api_id: int = 0
+    api_hash: str = ""
+
     # кэш скачиваний (дни)
     cache_ttl_days: int = 30
 
     # лимит файла для Telegram Bot API (в байтах)
     max_file_size: int = 50 * 1024 * 1024  # 50 МБ
+
+    @property
+    def telethon_enabled(self) -> bool:
+        """Telethon включён если указаны api_id и api_hash"""
+        return self.api_id > 0 and len(self.api_hash) > 0
 
     @property
     def admin_id_list(self) -> list[int]:

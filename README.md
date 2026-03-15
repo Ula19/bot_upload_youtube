@@ -7,7 +7,8 @@
 - 🎬 Скачивание видео в 360p / 720p
 - 🎵 Скачивание аудио (MP3)
 - 📱 Поддержка YouTube Shorts
-- ⚡ Автопонижение качества при превышении 50 МБ (720p → 360p → аудио)
+- 🚀 **Файлы до 2 ГБ** через Telethon (MTProto)
+- ⚡ Автопонижение качества при превышении 50 МБ (если Telethon выключен)
 - 💾 Кэширование file_id для быстрой повторной отправки
 - 📢 Обязательная подписка на каналы
 - 👨‍💼 Админ-панель: статистика, каналы, массовая рассылка
@@ -41,6 +42,10 @@ cp .env.example .env
 | `DB_PASSWORD` | Пароль PostgreSQL | ✅ |
 | `ADMIN_IDS` | ID админов через запятую | ❌ |
 | `ADMIN_USERNAME` | Username для помощи | ❌ |
+| `API_ID` | Telegram API ID (my.telegram.org) | ❌* |
+| `API_HASH` | Telegram API Hash | ❌* |
+
+\* Без `API_ID`/`API_HASH` бот работает, но с лимитом 50 МБ на файл.
 
 ## Системные зависимости
 
@@ -64,6 +69,7 @@ python -m bot.main
 - `aiogram` 3.26 — Telegram Bot API
 - `SQLAlchemy` 2.0 + `asyncpg` — PostgreSQL ORM
 - `yt-dlp` — скачивание YouTube видео
+- `Telethon` + `cryptg` — отправка файлов > 50 МБ через MTProto
 - `pydantic-settings` — конфигурация из .env
 - `alembic` — миграции БД
 - `aiofiles` — асинхронная работа с файлами
