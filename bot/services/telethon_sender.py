@@ -2,6 +2,7 @@
 Используется когда файл > 50 МБ — стандартный Bot API не справляется.
 Telethon подключается к Telegram напрямую через MTProto, лимит 2 ГБ.
 """
+import asyncio
 import logging
 import os
 import time
@@ -56,24 +57,59 @@ def is_available() -> bool:
     return _client is not None and _client.is_connected()
 
 
-def _make_progress_callback(chat_id: int, file_size_mb: float, status_msg=None):
-    """Создаёт callback для отображения прогресса загрузки.
-    Обновляет сообщение каждые 15% чтобы не спамить.
+async def _update_progress_message(chat_id: int, status_msg, progress_data: dict):
+    """Обновляет сообщение с прогрессом через aiogram.
+    Вызывается периодически из фоновой задачи.
     """
-    last_reported = [0]  # процент, при котором последний раз обновили
-    start_time = [time.time()]
+    if not status_msg or not _aiogram_bot:
+        return
 
-    async def callback(current, total):
+    percent = progress_data.get("percent", 0)
+    file_size_mb = progress_data.get("file_size_mb", 0)
+    speed_mbs = progress_data.get("speed_mbs", 0)
+    eta_str = progress_data.get("eta_str", "...")
+
+    # полоска прогресса
+    filled = int(percent / 10)
+    bar = "█" * filled + "░" * (10 - filled)
+
+    text = (
+        f"📤 <b>Загружаю видео...</b>\n\n"
+        f"{bar} {percent}%\n"
+        f"📦 {file_size_mb:.0f} МБ • "
+        f"⚡ {speed_mbs:.1f} МБ/с • "
+        f"⏱ ~{eta_str}"
+    )
+
+    try:
+        await _aiogram_bot.edit_message_text(
+            text=text,
+            chat_id=chat_id,
+            message_id=status_msg.message_id,
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass  # не критично если не удалось обновить
+
+
+def _make_progress_callback(chat_id: int, file_size_mb: float, status_msg=None):
+    """Создаёт СИНХРОННЫЙ callback для Telethon + планирует обновление сообщения.
+    Telethon не вызывает async callbacks корректно — используем sync.
+    """
+    last_reported = [0]
+    start_time = [time.time()]
+    loop = asyncio.get_event_loop()
+
+    def callback(current, total):
         if total == 0:
             return
 
         percent = int(current / total * 100)
 
-        # обновляем каждые 15% и на 100%
-        if percent - last_reported[0] >= 15 or percent == 100:
+        # логи каждые 20%
+        if percent - last_reported[0] >= 20 or percent == 100:
             last_reported[0] = percent
 
-            # считаем скорость и оставшееся время
             elapsed = time.time() - start_time[0]
             if elapsed > 0 and current > 0:
                 speed_mbs = (current / 1024 / 1024) / elapsed
@@ -84,34 +120,26 @@ def _make_progress_callback(chat_id: int, file_size_mb: float, status_msg=None):
                 speed_mbs = 0
                 eta_str = "..."
 
-            # полоска прогресса
-            filled = int(percent / 10)
-            bar = "█" * filled + "░" * (10 - filled)
-
-            progress_text = (
-                f"📤 <b>Загружаю видео...</b>\n\n"
-                f"{bar} {percent}%\n"
-                f"📦 {file_size_mb:.0f} МБ • "
-                f"⚡ {speed_mbs:.1f} МБ/с • "
-                f"⏱ ~{eta_str}"
+            logger.info(
+                f"Upload: {percent}% "
+                f"({current / 1024 / 1024:.0f}/{total / 1024 / 1024:.0f} МБ, "
+                f"{speed_mbs:.1f} МБ/с)"
             )
 
-            # обновляем сообщение через aiogram (а не Telethon)
+            # обновляем сообщение через asyncio (не блокируя)
             if status_msg and _aiogram_bot:
+                progress_data = {
+                    "percent": percent,
+                    "file_size_mb": file_size_mb,
+                    "speed_mbs": speed_mbs,
+                    "eta_str": eta_str,
+                }
                 try:
-                    await _aiogram_bot.edit_message_text(
-                        text=progress_text,
-                        chat_id=chat_id,
-                        message_id=status_msg.message_id,
-                        parse_mode="HTML",
+                    asyncio.ensure_future(
+                        _update_progress_message(chat_id, status_msg, progress_data)
                     )
                 except Exception:
-                    pass  # если не удалось обновить — не критично
-
-            logger.info(
-                f"Telethon upload: {percent}% "
-                f"({current / 1024 / 1024:.0f}/{total / 1024 / 1024:.0f} МБ)"
-            )
+                    pass
 
     return callback
 
@@ -124,9 +152,7 @@ async def send_video(
     status_msg=None,
 ) -> str | None:
     """Отправляет видео через Telethon с прогресс-баром.
-
-    Работает с файлами до 2 ГБ.
-    status_msg — сообщение aiogram, которое обновляется прогрессом.
+    status_msg — сообщение aiogram для отображения прогресса.
     """
     if not is_available():
         raise RuntimeError("Telethon не подключён")
@@ -137,15 +163,13 @@ async def send_video(
             f"Telethon: отправляю видео {file_size_mb:.1f} МБ в чат {chat_id}"
         )
 
-        # callback для отображения прогресса
         progress = _make_progress_callback(chat_id, file_size_mb, status_msg)
 
-        # отправляем видео
         result = await _client.send_file(
             entity=chat_id,
             file=file_path,
             caption=caption,
-            supports_streaming=True,  # чтобы видео играло сразу
+            supports_streaming=True,
             progress_callback=progress,
         )
 
