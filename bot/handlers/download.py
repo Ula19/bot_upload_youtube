@@ -193,7 +193,7 @@ async def _process_download(
                 parse_mode="HTML",
             )
 
-        file_id = await _send_media(message, result)
+        file_id = await _send_media(message, result, status_msg)
 
         # сохраняем в кэш
         if file_id:
@@ -246,7 +246,7 @@ async def _process_download(
             downloader.cleanup(result)
 
 
-async def _send_media(message: Message, result) -> str | None:
+async def _send_media(message: Message, result, status_msg=None) -> str | None:
     """Отправляет медиа юзеру и возвращает file_id"""
     from bot.services import telethon_sender
 
@@ -261,6 +261,7 @@ async def _send_media(message: Message, result) -> str | None:
                 file_path=result.file_path,
                 caption=caption,
                 duration=int(result.duration) if result.duration else None,
+                status_msg=status_msg,
             )
         else:
             await telethon_sender.send_audio(
@@ -269,6 +270,7 @@ async def _send_media(message: Message, result) -> str | None:
                 caption=caption,
                 title=result.title,
                 duration=int(result.duration) if result.duration else None,
+                status_msg=status_msg,
             )
         # Telethon file_id несовместим с Bot API — кэш не работает
         return None

@@ -57,7 +57,7 @@ async def main() -> None:
 
         # запускаем Telethon (для отправки больших файлов)
         from bot.services import telethon_sender
-        await telethon_sender.init_telethon()
+        await telethon_sender.init_telethon(aiogram_bot=bot)
 
         # проверяем crash recovery
         if os.path.exists(CRASH_FLAG):
