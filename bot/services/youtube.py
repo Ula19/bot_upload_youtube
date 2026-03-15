@@ -161,10 +161,13 @@ class YouTubeDownloader:
             self.download_dir, f"%(id)s_{quality}p.%(ext)s"
         )
 
-        # формат: видео+аудио в одном файле, ограничение по высоте
+        # приоритет h264 (avc1) — совместим с MP4 без перекодировки
+        # VP9/AV1 вызывают чёрный экран при мерже в MP4
         height = int(quality)
         format_str = (
-            f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
+            f"bestvideo[height<={height}][vcodec~='^(avc|h264)'][ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio"
+            f"/bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
             f"/bestvideo[height<={height}]+bestaudio"
             f"/best[height<={height}]"
             f"/best"
@@ -177,6 +180,11 @@ class YouTubeDownloader:
             "no_warnings": True,
             # объединяем видео и аудио в mp4
             "merge_output_format": "mp4",
+            # перекодируем в h264 если скачался VP9/AV1
+            "postprocessors": [{
+                "key": "FFmpegVideoConvertor",
+                "preferedformat": "mp4",
+            }],
         }
 
         loop = asyncio.get_event_loop()
