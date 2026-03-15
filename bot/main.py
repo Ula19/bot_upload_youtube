@@ -55,9 +55,9 @@ async def main() -> None:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Таблицы БД созданы")
 
-        # запускаем Telethon (для отправки больших файлов)
+        # запускаем Pyrogram (для отправки больших файлов)
         from bot.services import telethon_sender
-        await telethon_sender.init_telethon(aiogram_bot=bot)
+        await telethon_sender.init_pyrogram(aiogram_bot=bot)
 
         # проверяем crash recovery
         if os.path.exists(CRASH_FLAG):
@@ -73,9 +73,9 @@ async def main() -> None:
 
     @dp.shutdown()
     async def on_shutdown() -> None:
-        # останавливаем Telethon
+        # останавливаем Pyrogram
         from bot.services import telethon_sender
-        await telethon_sender.stop_telethon()
+        await telethon_sender.stop_pyrogram()
 
         # убираем crash-flag при нормальном завершении
         if os.path.exists(CRASH_FLAG):
