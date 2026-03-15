@@ -17,20 +17,14 @@ class Settings(BaseSettings):
     admin_ids: str = ""
     admin_username: str = "admin"
 
-    # Telegram API (для Telethon — отправка файлов > 50 МБ)
-    api_id: int = 0
-    api_hash: str = ""
+    # URL Bot API (Local Bot API на VPS = файлы до 2 ГБ)
+    bot_api_url: str = "https://api.telegram.org"
 
     # кэш скачиваний (дни)
     cache_ttl_days: int = 30
 
-    # лимит файла для Telegram Bot API (в байтах)
-    max_file_size: int = 50 * 1024 * 1024  # 50 МБ
-
-    @property
-    def telethon_enabled(self) -> bool:
-        """Telethon включён если указаны api_id и api_hash"""
-        return self.api_id > 0 and len(self.api_hash) > 0
+    # лимит файла (Local Bot API — 2 ГБ, обычный — 50 МБ)
+    max_file_size: int = 2 * 1024 * 1024 * 1024  # 2 ГБ
 
     @property
     def admin_id_list(self) -> list[int]:
@@ -47,7 +41,11 @@ class Settings(BaseSettings):
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",  # игнорируем лишние переменные в .env
+    }
 
 
 # глобальный экземпляр настроек

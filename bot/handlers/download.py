@@ -186,13 +186,6 @@ async def _process_download(
             quality = format_key.replace("video_", "")
             result = await downloader.download_video(url, quality)
 
-        # если качество было понижено — сообщаем юзеру
-        if result.was_downgraded:
-            await message.answer(
-                t("download.quality_downgraded", lang),
-                parse_mode="HTML",
-            )
-
         file_id = await _send_media(message, result, status_msg)
 
         # сохраняем в кэш
@@ -247,35 +240,9 @@ async def _process_download(
 
 
 async def _send_media(message: Message, result, status_msg=None) -> str | None:
-    """Отправляет медиа юзеру и возвращает file_id"""
-    from bot.services import telethon_sender
-
-    # большие файлы — через Telethon
-    if getattr(result, "needs_telethon", False) and telethon_sender.is_available():
-        chat_id = message.chat.id
-        caption = f"🎬 {result.title}" if result.media_type == "video" else f"🎵 {result.title}"
-
-        if result.media_type == "video":
-            await telethon_sender.send_video(
-                chat_id=chat_id,
-                file_path=result.file_path,
-                caption=caption,
-                duration=int(result.duration) if result.duration else None,
-                status_msg=status_msg,
-            )
-        else:
-            await telethon_sender.send_audio(
-                chat_id=chat_id,
-                file_path=result.file_path,
-                caption=caption,
-                title=result.title,
-                duration=int(result.duration) if result.duration else None,
-                status_msg=status_msg,
-            )
-        # Telethon file_id несовместим с Bot API — кэш не работает
-        return None
-
-    # обычные файлы < 50 МБ — через стандартный Bot API
+    """Отправляет медиа юзеру и возвращает file_id.
+    Через Local Bot API — файлы до 2 ГБ без ограничений.
+    """
     file = FSInputFile(result.file_path)
 
     if result.media_type == "video":

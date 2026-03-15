@@ -13,6 +13,7 @@ except ImportError:
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -32,9 +33,18 @@ CRASH_FLAG = ".crash_flag"
 
 async def main() -> None:
     """Инициализация и запуск бота"""
+    # подключаемся к Local Bot API если указан URL
+    session = None
+    api_url = settings.bot_api_url
+    if api_url != "https://api.telegram.org":
+        # Local Bot API — файлы до 2 ГБ
+        session = AiohttpSession(api=f"{api_url}/bot{{token}}/{{method}}")
+        logger.info(f"Local Bot API: {api_url}")
+
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
     )
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -62,10 +72,6 @@ async def main() -> None:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Таблицы БД созданы")
 
-        # запускаем Pyrogram (для отправки больших файлов)
-        from bot.services import telethon_sender
-        await telethon_sender.init_pyrogram(aiogram_bot=bot)
-
         # проверяем crash recovery
         if os.path.exists(CRASH_FLAG):
             logger.warning("Обнаружен crash-flag — предыдущий запуск завершился аварийно")
@@ -80,10 +86,6 @@ async def main() -> None:
 
     @dp.shutdown()
     async def on_shutdown() -> None:
-        # останавливаем Pyrogram
-        from bot.services import telethon_sender
-        await telethon_sender.stop_pyrogram()
-
         # убираем crash-flag при нормальном завершении
         if os.path.exists(CRASH_FLAG):
             os.remove(CRASH_FLAG)

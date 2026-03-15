@@ -33,8 +33,6 @@ class DownloadResult:
     title: str
     duration: int | None = None
     format_key: str = ""  # video_360, video_720, audio
-    was_downgraded: bool = False  # понижено ли качество автоматически
-    needs_telethon: bool = False  # нужно ли отправлять через Telethon
 
 
 class YouTubeDownloader:
@@ -69,39 +67,18 @@ class YouTubeDownloader:
     async def download_video(
         self, url: str, quality: str = "720"
     ) -> DownloadResult:
-        """Скачивает видео. Если Telethon включён — без ограничений.
-        Если нет — автопонижение качества при > 50 МБ.
+        """Скачивает видео в выбранном качестве.
+        Лимит файла задаётся в config (Local Bot API — 2 ГБ).
         """
         from bot.config import settings
 
-        # скачиваем в выбранном качестве
         result = await self._download_with_quality(url, quality)
         file_size = os.path.getsize(result.file_path)
 
-        # если Telethon включён — файлы до 2 ГБ пройдут
-        if settings.telethon_enabled:
-            if file_size > 2 * 1024 * 1024 * 1024:
-                self._remove_file(result.file_path)
-                raise FileTooLargeError("Видео больше 2 ГБ")
-            # помечаем что нужно отправить через Telethon
-            result.needs_telethon = file_size > MAX_FILE_SIZE
-            return result
-
-        # без Telethon — старая логика с автопонижением
-        if file_size > MAX_FILE_SIZE and quality == "720":
-            logger.info(
-                f"Файл {file_size / 1024 / 1024:.1f} МБ > 50 МБ, "
-                f"понижаю качество до 360p"
-            )
-            self._remove_file(result.file_path)
-            result = await self._download_with_quality(url, "360")
-            result.was_downgraded = True
-            file_size = os.path.getsize(result.file_path)
-
-        if file_size > MAX_FILE_SIZE:
+        if file_size > settings.max_file_size:
             self._remove_file(result.file_path)
             raise FileTooLargeError(
-                f"Видео слишком большое даже в 360p "
+                f"Видео слишком большое "
                 f"({file_size / 1024 / 1024:.0f} МБ)"
             )
 
