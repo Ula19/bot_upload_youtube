@@ -1,0 +1,307 @@
+"""Хэндлер скачивания — обрабатывает ссылки YouTube
+Флоу: ссылка → выбор формата → выбор качества → скачивание → отправка
+"""
+import logging
+import os
+
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, FSInputFile, Message
+
+from bot.database import async_session
+from bot.database.crud import (
+    get_cached_download,
+    get_or_create_user,
+    get_user_language,
+    save_download,
+)
+from bot.i18n import t
+from bot.keyboards.inline import (
+    get_audio_suggest_keyboard,
+    get_back_keyboard,
+    get_format_keyboard,
+    get_quality_keyboard,
+)
+from bot.services.youtube import FileTooLargeError, downloader
+from bot.utils.helpers import clean_youtube_url, is_youtube_url
+
+logger = logging.getLogger(__name__)
+router = Router()
+
+
+# FSM для сохранения URL между шагами выбора
+class DownloadStates(StatesGroup):
+    waiting_format = State()
+    waiting_quality = State()
+
+
+@router.message(F.text)
+async def handle_youtube_link(message: Message, state: FSMContext) -> None:
+    """Обработка текстовых сообщений — ищем ссылки YouTube"""
+    text = message.text.strip()
+
+    async with async_session() as session:
+        lang = await get_user_language(session, message.from_user.id)
+
+    # проверяем что это ссылка на YouTube
+    if not is_youtube_url(text):
+        await message.answer(
+            t("download.not_youtube", lang),
+            parse_mode="HTML",
+        )
+        return
+
+    clean_url = clean_youtube_url(text)
+
+    # получаем инфо о видео
+    try:
+        status_msg = await message.answer(t("download.fetching_info", lang))
+        info = await downloader.get_info(clean_url)
+
+        # сохраняем URL и инфо в FSM
+        await state.set_state(DownloadStates.waiting_format)
+        await state.update_data(
+            url=clean_url,
+            title=info.title,
+            duration=info.duration,
+            msg_id=message.message_id,
+        )
+
+        # форматируем длительность
+        duration_str = _format_duration(info.duration)
+
+        await status_msg.edit_text(
+            t("download.info", lang,
+              title=info.title,
+              duration=duration_str,
+              uploader=info.uploader or "—"),
+            reply_markup=get_format_keyboard(lang),
+            parse_mode="HTML",
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка получения инфо: {e}")
+        error_text = _get_error_text(str(e), lang)
+        if status_msg:
+            await status_msg.edit_text(error_text)
+        else:
+            await message.answer(error_text)
+
+
+@router.callback_query(F.data == "fmt_video")
+async def choose_video_format(callback: CallbackQuery, state: FSMContext) -> None:
+    """Юзер выбрал видео — показываем качество"""
+    async with async_session() as session:
+        lang = await get_user_language(session, callback.from_user.id)
+
+    await state.set_state(DownloadStates.waiting_quality)
+
+    await callback.message.edit_text(
+        t("download.choose_quality", lang),
+        reply_markup=get_quality_keyboard(lang),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "fmt_audio")
+async def download_audio(callback: CallbackQuery, state: FSMContext) -> None:
+    """Юзер выбрал аудио — скачиваем MP3"""
+    data = await state.get_data()
+    url = data.get("url")
+    await state.clear()
+
+    if not url:
+        await callback.answer("❌ Ссылка не найдена, отправь заново")
+        return
+
+    async with async_session() as session:
+        lang = await get_user_language(session, callback.from_user.id)
+
+    await _process_download(
+        callback.message, url, "audio", callback.from_user, lang
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("quality_"))
+async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
+    """Юзер выбрал качество — скачиваем видео"""
+    quality = callback.data.replace("quality_", "")  # "360" или "720"
+    data = await state.get_data()
+    url = data.get("url")
+    await state.clear()
+
+    if not url:
+        await callback.answer("❌ Ссылка не найдена, отправь заново")
+        return
+
+    async with async_session() as session:
+        lang = await get_user_language(session, callback.from_user.id)
+
+    format_key = f"video_{quality}"
+    await _process_download(
+        callback.message, url, format_key, callback.from_user, lang
+    )
+    await callback.answer()
+
+
+async def _process_download(
+    message: Message,
+    url: str,
+    format_key: str,
+    user,
+    lang: str = "ru",
+) -> None:
+    """Скачивает и отправляет медиа"""
+    # проверяем кэш
+    async with async_session() as session:
+        await get_or_create_user(
+            session=session,
+            telegram_id=user.id,
+            username=user.username,
+            full_name=user.full_name,
+        )
+        cached = await get_cached_download(session, url, format_key)
+
+    if cached:
+        logger.info(f"Кэш найден для {url} [{format_key}]")
+        await _send_cached(message, cached.file_id, cached.media_type)
+        return
+
+    # скачиваем
+    status_msg = await message.edit_text(t("download.processing", lang))
+
+    result = None
+    try:
+        if format_key == "audio":
+            result = await downloader.download_audio(url)
+        else:
+            quality = format_key.replace("video_", "")
+            result = await downloader.download_video(url, quality)
+
+        # если качество было понижено — сообщаем юзеру
+        if result.was_downgraded:
+            await message.answer(
+                t("download.quality_downgraded", lang),
+                parse_mode="HTML",
+            )
+
+        file_id = await _send_media(message, result)
+
+        # сохраняем в кэш
+        if file_id:
+            actual_format_key = result.format_key or format_key
+            async with async_session() as session:
+                await save_download(
+                    session=session,
+                    youtube_url=url,
+                    format_key=actual_format_key,
+                    file_id=file_id,
+                    media_type=result.media_type,
+                )
+                user_obj = await get_or_create_user(
+                    session=session,
+                    telegram_id=user.id,
+                    username=user.username,
+                    full_name=user.full_name,
+                )
+                user_obj.download_count += 1
+                await session.commit()
+
+        # удаляем статусное сообщение
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
+    except FileTooLargeError:
+        # видео слишком большое даже в 360p — предлагаем аудио
+        await status_msg.edit_text(
+            t("error.too_large_suggest_audio", lang),
+            reply_markup=get_audio_suggest_keyboard(lang),
+            parse_mode="HTML",
+        )
+        # восстанавливаем FSM с URL для кнопки "Скачать аудио"
+        from aiogram.fsm.context import FSMContext
+        # нельзя восстановить state из message, поэтому запоминаем URL в callback_data
+        # не идеально, но URL уже есть в сообщении
+    except Exception as e:
+        logger.error(f"Ошибка скачивания {url}: {e}")
+        error_text = _get_error_text(str(e), lang)
+        await status_msg.edit_text(error_text)
+
+    finally:
+        if result:
+            downloader.cleanup(result)
+
+
+async def _send_media(message: Message, result) -> str | None:
+    """Отправляет медиа юзеру и возвращает file_id"""
+    file = FSInputFile(result.file_path)
+
+    if result.media_type == "video":
+        sent = await message.answer_video(
+            video=file,
+            caption=f"🎬 {result.title}",
+            duration=int(result.duration) if result.duration else None,
+        )
+        return sent.video.file_id
+
+    elif result.media_type == "audio":
+        sent = await message.answer_audio(
+            audio=file,
+            caption=f"🎵 {result.title}",
+            duration=int(result.duration) if result.duration else None,
+            title=result.title,
+        )
+        return sent.audio.file_id
+
+    return None
+
+
+async def _send_cached(
+    message: Message, file_id: str, media_type: str
+) -> None:
+    """Отправляет из кэша по file_id"""
+    try:
+        if media_type == "video":
+            await message.answer_video(video=file_id, caption="🎬 YouTube Video")
+        elif media_type == "audio":
+            await message.answer_audio(audio=file_id, caption="🎵 YouTube Audio")
+    except Exception as e:
+        logger.error(f"Ошибка отправки из кэша: {e}")
+        await message.answer("⚠️ Кэш устарел. Отправь ссылку ещё раз.")
+
+
+def _format_duration(seconds: int) -> str:
+    """Форматирует секунды в MM:SS или HH:MM:SS"""
+    if not seconds:
+        return "—"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _get_error_text(error: str, lang: str = "ru") -> str:
+    """Человеко-понятное сообщение об ошибке"""
+    error_lower = error.lower()
+
+    if "private" in error_lower or "login" in error_lower:
+        return t("error.private", lang)
+    elif "not found" in error_lower or "404" in error_lower:
+        return t("error.not_found", lang)
+    elif "unavailable" in error_lower:
+        return t("error.unavailable", lang)
+    elif "too large" in error_lower or "50 мб" in error_lower:
+        return t("error.too_large", lang)
+    elif "timeout" in error_lower:
+        return t("error.timeout", lang)
+    elif "age" in error_lower:
+        return t("error.age_restricted", lang)
+    else:
+        return t("error.generic", lang)

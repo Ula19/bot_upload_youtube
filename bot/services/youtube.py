@@ -1,0 +1,248 @@
+"""Сервис скачивания YouTube — через yt-dlp
+Поддерживает: видео (MP4), аудио (MP3), Shorts
+Автопонижение качества при превышении 50 МБ
+"""
+import asyncio
+import logging
+import os
+import tempfile
+from dataclasses import dataclass
+
+from bot.config import settings
+
+logger = logging.getLogger(__name__)
+
+# максимальный размер файла (50 МБ для стандартного Bot API)
+MAX_FILE_SIZE = settings.max_file_size
+
+
+@dataclass
+class VideoInfo:
+    """Информация о видео (до скачивания)"""
+    title: str
+    duration: int  # в секундах
+    thumbnail: str | None = None
+    uploader: str | None = None
+
+
+@dataclass
+class DownloadResult:
+    """Результат скачивания"""
+    file_path: str
+    media_type: str       # video или audio
+    title: str
+    duration: int | None = None
+    format_key: str = ""  # video_360, video_720, audio
+    was_downgraded: bool = False  # понижено ли качество автоматически
+
+
+class YouTubeDownloader:
+    """Скачивает контент с YouTube через yt-dlp"""
+
+    def __init__(self):
+        self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
+
+    async def get_info(self, url: str) -> VideoInfo:
+        """Получает метаданные видео без скачивания"""
+        import yt_dlp
+
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+        }
+
+        # yt-dlp синхронный, запускаем в отдельном потоке
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._extract_info, url, ydl_opts
+        )
+
+        return VideoInfo(
+            title=info.get("title", "Без названия"),
+            duration=info.get("duration", 0),
+            thumbnail=info.get("thumbnail"),
+            uploader=info.get("uploader"),
+        )
+
+    async def download_video(
+        self, url: str, quality: str = "720"
+    ) -> DownloadResult:
+        """Скачивает видео с автопонижением качества
+        quality: "360" или "720"
+        """
+        was_downgraded = False
+
+        # пробуем скачать в выбранном качестве
+        result = await self._download_with_quality(url, quality)
+
+        # проверяем размер — если больше лимита, понижаем
+        file_size = os.path.getsize(result.file_path)
+
+        if file_size > MAX_FILE_SIZE and quality == "720":
+            logger.info(
+                f"Файл {file_size / 1024 / 1024:.1f} МБ > 50 МБ, "
+                f"понижаю качество до 360p"
+            )
+            # удаляем тяжёлый файл
+            self._remove_file(result.file_path)
+            # скачиваем в 360p
+            result = await self._download_with_quality(url, "360")
+            result.was_downgraded = True
+            was_downgraded = True
+            file_size = os.path.getsize(result.file_path)
+
+        # если и 360p не влезает — возвращаем None (хэндлер предложит аудио)
+        if file_size > MAX_FILE_SIZE:
+            self._remove_file(result.file_path)
+            raise FileTooLargeError(
+                f"Видео слишком большое даже в 360p "
+                f"({file_size / 1024 / 1024:.0f} МБ)"
+            )
+
+        result.was_downgraded = was_downgraded
+        return result
+
+    async def download_audio(self, url: str) -> DownloadResult:
+        """Скачивает аудио (MP3, 128kbps)"""
+        import yt_dlp
+
+        output_template = os.path.join(
+            self.download_dir, "%(id)s_audio.%(ext)s"
+        )
+
+        ydl_opts = {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            # конвертируем в mp3 через ffmpeg
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "128",
+            }],
+        }
+
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._download, url, ydl_opts
+        )
+
+        # yt-dlp меняет расширение после конвертации
+        file_path = self._find_downloaded_file(info, "mp3")
+
+        if not file_path or not os.path.exists(file_path):
+            raise RuntimeError("Не удалось найти скачанный аудиофайл")
+
+        # проверяем размер
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE:
+            self._remove_file(file_path)
+            raise FileTooLargeError(
+                f"Аудио слишком большое ({file_size / 1024 / 1024:.0f} МБ)"
+            )
+
+        return DownloadResult(
+            file_path=file_path,
+            media_type="audio",
+            title=info.get("title", "YouTube Audio"),
+            duration=info.get("duration"),
+            format_key="audio",
+        )
+
+    async def _download_with_quality(
+        self, url: str, quality: str
+    ) -> DownloadResult:
+        """Скачивает видео в указанном качестве"""
+        import yt_dlp
+
+        output_template = os.path.join(
+            self.download_dir, f"%(id)s_{quality}p.%(ext)s"
+        )
+
+        # формат: видео+аудио в одном файле, ограничение по высоте
+        height = int(quality)
+        format_str = (
+            f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={height}]+bestaudio"
+            f"/best[height<={height}]"
+            f"/best"
+        )
+
+        ydl_opts = {
+            "format": format_str,
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            # объединяем видео и аудио в mp4
+            "merge_output_format": "mp4",
+        }
+
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._download, url, ydl_opts
+        )
+
+        file_path = self._find_downloaded_file(info, "mp4")
+
+        if not file_path or not os.path.exists(file_path):
+            raise RuntimeError("Не удалось найти скачанный видеофайл")
+
+        return DownloadResult(
+            file_path=file_path,
+            media_type="video",
+            title=info.get("title", "YouTube Video"),
+            duration=info.get("duration"),
+            format_key=f"video_{quality}",
+        )
+
+    def _extract_info(self, url: str, opts: dict) -> dict:
+        """Извлекает метаданные (синхронно)"""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=False)
+
+    def _download(self, url: str, opts: dict) -> dict:
+        """Скачивает видео/аудио (синхронно)"""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=True)
+
+    def _find_downloaded_file(self, info: dict, expected_ext: str) -> str | None:
+        """Ищет скачанный файл в папке загрузок"""
+        video_id = info.get("id", "")
+
+        # ищем файл по id видео
+        for filename in os.listdir(self.download_dir):
+            if video_id in filename and filename.endswith(f".{expected_ext}"):
+                return os.path.join(self.download_dir, filename)
+
+        # если не нашли по id — берём последний файл с нужным расширением
+        for filename in sorted(os.listdir(self.download_dir), reverse=True):
+            if filename.endswith(f".{expected_ext}"):
+                return os.path.join(self.download_dir, filename)
+
+        return None
+
+    def cleanup(self, result: DownloadResult) -> None:
+        """Удаляет временные файлы после отправки"""
+        self._remove_file(result.file_path)
+
+    def _remove_file(self, path: str) -> None:
+        """Безопасно удаляет файл"""
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                logger.info(f"Удалён: {path}")
+        except OSError as e:
+            logger.warning(f"Не удалось удалить файл: {e}")
+
+
+class FileTooLargeError(Exception):
+    """Файл превышает лимит Telegram"""
+    pass
+
+
+# глобальный экземпляр
+downloader = YouTubeDownloader()

@@ -1,4 +1,34 @@
+# виртуальное окружение
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# переменные окружения
+.env
+
+# системные файлы
+.DS_Store
+
+# логи
+*.log
+
+# временные файлы скачивания
+downloads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
 
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Markdown не отслеживаем (кроме README.md)
+AGENTS.md
+PROJECT_LOG.md
+DEPLOY.md
+
+# alembic (если не нужно отслеживать)
+# alembic/versions/*.py
