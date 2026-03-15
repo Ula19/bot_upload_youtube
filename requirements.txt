@@ -13,3 +13,6 @@ python-dotenv==1.0.1
 # Отправка больших файлов (> 50 МБ) через MTProto
 pyrogram==2.0.106
 TgCrypto==1.2.5
+
+# Ускорение asyncio (не работает на Windows!)
+uvloop==0.22.1

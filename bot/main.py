@@ -4,6 +4,13 @@ import logging
 import os
 import sys
 
+# uvloop ускоряет asyncio в 2-4 раза (не работает на Windows!)
+try:
+    import uvloop
+    uvloop.install()
+except ImportError:
+    pass  # на Windows — работаем без uvloop
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
