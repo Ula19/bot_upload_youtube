@@ -59,6 +59,8 @@ class YouTubeDownloader:
             "no_warnings": True,
             "skip_download": True,
             "cookiefile": self._cookies,
+            # нам нужны только метаданные, форматы не важны
+            "ignore_no_formats_error": True,
         }
 
         # yt-dlp синхронный, запускаем в отдельном потоке
