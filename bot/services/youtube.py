@@ -38,8 +38,17 @@ class DownloadResult:
 class YouTubeDownloader:
     """Скачивает контент с YouTube через yt-dlp"""
 
+    # путь к cookies (пробрасывается через docker volume)
+    COOKIES_FILE = "/app/cookies.txt"
+
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
+        # если cookies есть — используем, иначе None
+        self._cookies = self.COOKIES_FILE if os.path.exists(self.COOKIES_FILE) else None
+        if self._cookies:
+            logger.info("YouTube cookies подключены: %s", self._cookies)
+        else:
+            logger.warning("cookies.txt не найден — YouTube может блокировать запросы")
 
     async def get_info(self, url: str) -> VideoInfo:
         """Получает метаданные видео без скачивания"""
@@ -49,6 +58,7 @@ class YouTubeDownloader:
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
+            "cookiefile": self._cookies,
         }
 
         # yt-dlp синхронный, запускаем в отдельном потоке
@@ -97,6 +107,7 @@ class YouTubeDownloader:
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,
+            "cookiefile": self._cookies,
             # конвертируем в mp3 через ffmpeg
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
@@ -159,6 +170,7 @@ class YouTubeDownloader:
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,
+            "cookiefile": self._cookies,
             # объединяем видео и аудио в mp4
             "merge_output_format": "mp4",
             # перекодируем в h264 если скачался VP9/AV1

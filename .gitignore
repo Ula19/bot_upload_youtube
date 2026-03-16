@@ -6,6 +6,7 @@ __pycache__/
 
 # переменные окружения
 .env
+cookies.txt
 
 # системные файлы
 .DS_Store

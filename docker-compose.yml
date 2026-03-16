@@ -12,6 +12,8 @@ services:
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
+      # cookies для обхода блокировки YouTube
+      - ./cookies.txt:/app/cookies.txt:ro
 
   # Local Bot API — файлы до 2 ГБ без ограничений
   bot-api:
