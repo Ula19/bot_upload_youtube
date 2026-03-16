@@ -50,15 +50,23 @@ class YouTubeDownloader:
         else:
             logger.warning("cookies.txt не найден — YouTube может блокировать запросы")
 
+    def _base_opts(self) -> dict:
+        """Общие настройки для всех запросов yt-dlp"""
+        return {
+            "quiet": True,
+            "no_warnings": True,
+            "cookiefile": self._cookies,
+            # используем web player для решения signature challenge
+            "extractor_args": {"youtube": {"player_client": ["web"]}},
+        }
+
     async def get_info(self, url: str) -> VideoInfo:
         """Получает метаданные видео без скачивания"""
         import yt_dlp
 
         ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
+            **self._base_opts(),
             "skip_download": True,
-            "cookiefile": self._cookies,
             # нам нужны только метаданные, форматы не важны
             "ignore_no_formats_error": True,
         }
@@ -105,10 +113,9 @@ class YouTubeDownloader:
         )
 
         ydl_opts = {
+            **self._base_opts(),
             "format": "bestaudio[ext=m4a]/bestaudio/best",
             "outtmpl": output_template,
-            "quiet": True,
-            "no_warnings": True,
             "cookiefile": self._cookies,
             # конвертируем в mp3 через ffmpeg
             "postprocessors": [{
@@ -168,11 +175,9 @@ class YouTubeDownloader:
         )
 
         ydl_opts = {
+            **self._base_opts(),
             "format": format_str,
             "outtmpl": output_template,
-            "quiet": True,
-            "no_warnings": True,
-            "cookiefile": self._cookies,
             # объединяем видео и аудио в mp4
             "merge_output_format": "mp4",
             # перекодируем в h264 если скачался VP9/AV1
