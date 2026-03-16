@@ -27,7 +27,7 @@ downloads/
 
 # Markdown не отслеживаем (кроме README.md)
 AGENTS.md
-PROJECT_LOG.md
+
 
 # тестовые скрипты
 test_local.py
