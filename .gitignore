@@ -25,9 +25,9 @@ downloads/
 .dolt/
 *.db
 
-# Markdown не отслеживаем (кроме README.md)
+# Markdown не отслеживаем (кроме README.md и DEPLOY.md)
 AGENTS.md
-
+PROJECT_LOG.md
 
 # тестовые скрипты
 test_local.py
