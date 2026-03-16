@@ -106,7 +106,7 @@ async def save_download(
         download.created_at = datetime.now()
         download.download_count += 1
         from datetime import timedelta
-        download.expires_at = datetime.now() + timedelta(days=30)
+        download.expires_at = datetime.now() + timedelta(days=1)
     else:
         download = Download(
             youtube_url=youtube_url,

@@ -103,5 +103,6 @@ async def is_subscribed(bot: Bot, channel_id: int, user_id: int) -> bool:
         return member.status in ("member", "administrator", "creator")
     except Exception as e:
         logger.warning(f"Не удалось проверить подписку {user_id} на {channel_id}: {e}")
-        # если ошибка — пропускаем (чтобы бот не ломался)
-        return True
+        # при ошибке считаем юзера НЕ подписанным
+        # частая причина: бот не добавлен админом в канал
+        return False

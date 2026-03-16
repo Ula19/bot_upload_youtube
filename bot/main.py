@@ -14,6 +14,7 @@ except ImportError:
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -38,7 +39,11 @@ async def main() -> None:
     api_url = settings.bot_api_url
     if api_url != "https://api.telegram.org":
         # Local Bot API — файлы до 2 ГБ
-        session = AiohttpSession(api=f"{api_url}/bot{{token}}/{{method}}")
+        # Увеличиваем таймаут для загрузки больших файлов (по умолчанию 60 сек)
+        session = AiohttpSession(
+            api=TelegramAPIServer.from_base(api_url, is_local=True),
+            timeout=600  # 10 минут на запрос
+        )
         logger.info(f"Local Bot API: {api_url}")
 
     bot = Bot(

@@ -23,6 +23,7 @@ from bot.database.crud import (
     get_user_stats,
     remove_channel,
 )
+from bot.emojis import E, E_ID
 from bot.i18n import t
 from bot.keyboards.admin import (
     get_admin_keyboard,
@@ -81,7 +82,7 @@ async def cmd_admin(message: Message) -> None:
 async def admin_stats(callback: CallbackQuery) -> None:
     """Показывает статистику"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     lang = await _get_lang(callback.from_user.id)
@@ -105,7 +106,7 @@ async def admin_stats(callback: CallbackQuery) -> None:
 async def admin_channels(callback: CallbackQuery) -> None:
     """Показывает список каналов"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     lang = await _get_lang(callback.from_user.id)
@@ -121,7 +122,7 @@ async def admin_channels(callback: CallbackQuery) -> None:
             lines.append(
                 f"{i}. <b>{ch.title}</b>\n"
                 f"   ID: <code>{ch.channel_id}</code>\n"
-                f"   🔗 {ch.invite_link}"
+                f"   {E['link']} {ch.invite_link}"
             )
         text = "\n".join(lines)
 
@@ -140,7 +141,7 @@ async def admin_channels(callback: CallbackQuery) -> None:
 async def start_add_channel(callback: CallbackQuery, state: FSMContext) -> None:
     """Начало добавления канала"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     lang = await _get_lang(callback.from_user.id)
@@ -232,14 +233,14 @@ async def process_invite_link(message: Message, state: FSMContext) -> None:
             )
         await message.answer(
             f"{t('admin.channel_added', lang)}\n\n"
-            f"📢 {channel.title}\n"
-            f"🆔 <code>{channel.channel_id}</code>\n"
-            f"🔗 {channel.invite_link}",
+            f"{E['megaphone']} {channel.title}\n"
+            f"{E['info']} <code>{channel.channel_id}</code>\n"
+            f"{E['link']} {channel.invite_link}",
             reply_markup=get_admin_keyboard(lang),
         )
     except ValueError as e:
         await message.answer(
-            f"❌ {e}",
+            f"{E['cross']} {e}",
             reply_markup=get_admin_keyboard(lang),
         )
 
@@ -250,7 +251,7 @@ async def process_invite_link(message: Message, state: FSMContext) -> None:
 async def confirm_delete_channel(callback: CallbackQuery) -> None:
     """Подтверждение перед удалением"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     lang = await _get_lang(callback.from_user.id)
@@ -261,10 +262,14 @@ async def confirm_delete_channel(callback: CallbackQuery) -> None:
             InlineKeyboardButton(
                 text=t("btn.admin_confirm_del", lang),
                 callback_data=f"admin_confirm_del_{channel_id}",
+                style="danger",
+                icon_custom_emoji_id=E_ID["trash"],
             ),
             InlineKeyboardButton(
                 text=t("btn.admin_cancel_del", lang),
                 callback_data="admin_channels",
+                style="success",
+                icon_custom_emoji_id=E_ID["check"],
             ),
         ],
     ])
@@ -280,7 +285,7 @@ async def confirm_delete_channel(callback: CallbackQuery) -> None:
 async def delete_channel(callback: CallbackQuery) -> None:
     """Удаление канала"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     channel_id = int(callback.data.replace("admin_confirm_del_", ""))
@@ -289,9 +294,9 @@ async def delete_channel(callback: CallbackQuery) -> None:
         removed = await remove_channel(session, channel_id)
 
     if removed:
-        await callback.answer("✅ Канал удалён!")
+        await callback.answer(f"{E['check']} Канал удалён!")
     else:
-        await callback.answer("❌ Канал не найден")
+        await callback.answer(f"{E['cross']} Канал не найден")
 
     await admin_channels(callback)
 
@@ -339,7 +344,7 @@ def _normalize_channel_link(raw: str) -> str | None:
 async def start_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
     """Начало рассылки"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     lang = await _get_lang(callback.from_user.id)
@@ -377,10 +382,14 @@ async def preview_broadcast(message: Message, state: FSMContext) -> None:
             InlineKeyboardButton(
                 text=t("admin.broadcast_confirm", lang),
                 callback_data="admin_broadcast_confirm",
+                style="success",
+                icon_custom_emoji_id=E_ID["check"],
             ),
             InlineKeyboardButton(
                 text=t("admin.broadcast_cancel", lang),
                 callback_data="admin_cancel",
+                style="danger",
+                icon_custom_emoji_id=E_ID["cross"],
             ),
         ],
     ])
@@ -411,7 +420,7 @@ async def confirm_broadcast(
 ) -> None:
     """Подтверждение и запуск рассылки"""
     if not is_admin(callback.from_user.id):
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['lock']} Нет доступа")
         return
 
     data = await state.get_data()
@@ -420,7 +429,7 @@ async def confirm_broadcast(
     await state.clear()
 
     if not msg_data:
-        await callback.answer("❌ Нет сообщения")
+        await callback.answer(f"{E['cross']} Нет сообщения")
         return
 
     await callback.message.edit_text(t("admin.broadcast_started", lang))

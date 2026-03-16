@@ -28,7 +28,9 @@ downloads/
 # Markdown не отслеживаем (кроме README.md)
 AGENTS.md
 PROJECT_LOG.md
-DEPLOY.md
+
+# тестовые скрипты
+test_local.py
 
 # alembic (если не нужно отслеживать)
 # alembic/versions/*.py

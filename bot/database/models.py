@@ -73,7 +73,7 @@ class Download(Base):
     # когда кэш протухнет (по умолчанию +30 дней)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now() + timedelta(days=30),
+        default=lambda: datetime.now() + timedelta(days=1),
     )
 
     @property

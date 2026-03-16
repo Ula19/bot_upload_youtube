@@ -186,7 +186,7 @@ async def _process_download(
             quality = format_key.replace("video_", "")
             result = await downloader.download_video(url, quality)
 
-        file_id = await _send_media(message, result, status_msg)
+        file_id = await _send_media(message, result, status_msg, lang)
 
         # сохраняем в кэш
         if file_id:
@@ -239,11 +239,18 @@ async def _process_download(
             downloader.cleanup(result)
 
 
-async def _send_media(message: Message, result, status_msg=None) -> str | None:
+async def _send_media(message: Message, result, status_msg=None, lang="ru") -> str | None:
     """Отправляет медиа юзеру и возвращает file_id.
     Через Local Bot API — файлы до 2 ГБ без ограничений.
     """
     file = FSInputFile(result.file_path)
+
+    # Уведомляем пользователя перед долгой отправкой
+    if status_msg:
+        try:
+            await status_msg.edit_text(t("download.uploading", lang))
+        except Exception:
+            pass
 
     if result.media_type == "video":
         sent = await message.answer_video(
