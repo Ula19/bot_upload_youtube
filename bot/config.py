@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     # URL Bot API (Local Bot API на VPS = файлы до 2 ГБ)
     bot_api_url: str = "https://api.telegram.org"
 
-    # Cobalt API (self-hosted, скачивание YouTube)
-    cobalt_url: str = "http://cobalt:9000"
+    # прокси для YouTube (резидентный IP)
+    proxy_url: str = ""
 
     # кэш скачиваний (дни)
     cache_ttl_days: int = 30

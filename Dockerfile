@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
-# ffmpeg нужен для конвертации видео
+# ffmpeg для конвертации, nodejs для yt-dlp (YouTube challenge)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

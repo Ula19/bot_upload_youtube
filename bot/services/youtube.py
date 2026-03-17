@@ -1,14 +1,12 @@
-"""Сервис скачивания YouTube — через Cobalt API
+"""Сервис скачивания YouTube — через yt-dlp + прокси
 Поддерживает: видео (MP4), аудио (MP3), Shorts
-Cobalt работает как self-hosted Docker-сервис
+Автопонижение качества при превышении лимита
 """
 import asyncio
 import logging
 import os
 import tempfile
 from dataclasses import dataclass
-
-import aiohttp
 
 from bot.config import settings
 
@@ -38,86 +36,95 @@ class DownloadResult:
 
 
 class YouTubeDownloader:
-    """Скачивает контент с YouTube через Cobalt API"""
+    """Скачивает контент с YouTube через yt-dlp + резидентный прокси"""
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
-        self.cobalt_url = settings.cobalt_url
-        logger.info("Cobalt API: %s", self.cobalt_url)
+        self._proxy = settings.proxy_url or None
+        if self._proxy:
+            logger.info("Прокси подключен: %s", self._proxy)
+        else:
+            logger.warning("Прокси не задан — YouTube может блокировать запросы")
+
+    def _base_opts(self) -> dict:
+        """Общие настройки для всех запросов yt-dlp"""
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+        }
+        # прокси для обхода блокировки серверного IP
+        if self._proxy:
+            opts["proxy"] = self._proxy
+        return opts
 
     async def get_info(self, url: str) -> VideoInfo:
-        """Получает метаданные видео через YouTube oEmbed API"""
-        oembed_url = (
-            f"https://www.youtube.com/oembed"
-            f"?url={url}&format=json"
+        """Получает метаданные видео без скачивания"""
+        import yt_dlp
+
+        ydl_opts = {
+            **self._base_opts(),
+            "skip_download": True,
+            "ignore_no_formats_error": True,
+        }
+
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._extract_info, url, ydl_opts
         )
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(oembed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return VideoInfo(
-                            title=data.get("title", "Без названия"),
-                            duration=0,  # oEmbed не даёт duration
-                            thumbnail=data.get("thumbnail_url"),
-                            uploader=data.get("author_name"),
-                        )
-        except Exception as e:
-            logger.warning("oEmbed не сработал: %s", e)
-
-        # если oEmbed не сработал — возвращаем заглушку
-        return VideoInfo(title="YouTube видео", duration=0)
+        return VideoInfo(
+            title=info.get("title", "Без названия"),
+            duration=info.get("duration", 0),
+            thumbnail=info.get("thumbnail"),
+            uploader=info.get("uploader"),
+        )
 
     async def download_video(
         self, url: str, quality: str = "720"
     ) -> DownloadResult:
-        """Скачивает видео через Cobalt API"""
-        # запрос к Cobalt
-        cobalt_data = {
-            "url": url,
-            "videoQuality": quality,
-            "youtubeVideoCodec": "h264",
-        }
+        """Скачивает видео в выбранном качестве"""
+        result = await self._download_with_quality(url, quality)
+        file_size = os.path.getsize(result.file_path)
 
-        file_url = await self._request_cobalt(cobalt_data)
-        file_path = os.path.join(
-            self.download_dir, f"video_{quality}p.mp4"
-        )
-
-        await self._download_file(file_url, file_path)
-
-        # проверяем размер
-        file_size = os.path.getsize(file_path)
-        if file_size > MAX_FILE_SIZE:
-            self._remove_file(file_path)
+        if file_size > settings.max_file_size:
+            self._remove_file(result.file_path)
             raise FileTooLargeError(
                 f"Видео слишком большое "
                 f"({file_size / 1024 / 1024:.0f} МБ)"
             )
 
-        return DownloadResult(
-            file_path=file_path,
-            media_type="video",
-            title="YouTube Video",
-            format_key=f"video_{quality}",
-        )
+        return result
 
     async def download_audio(self, url: str) -> DownloadResult:
-        """Скачивает аудио (MP3) через Cobalt API"""
-        cobalt_data = {
-            "url": url,
-            "downloadMode": "audio",
-            "audioFormat": "mp3",
-            "audioBitrate": "128",
-        }
+        """Скачивает аудио (MP3, 128kbps)"""
+        import yt_dlp
 
-        file_url = await self._request_cobalt(cobalt_data)
-        file_path = os.path.join(
-            self.download_dir, "audio.mp3"
+        output_template = os.path.join(
+            self.download_dir, "%(id)s_audio.%(ext)s"
         )
 
-        await self._download_file(file_url, file_path)
+        ydl_opts = {
+            **self._base_opts(),
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": output_template,
+            # конвертируем в mp3 через ffmpeg
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "128",
+            }],
+        }
+
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._download, url, ydl_opts
+        )
+
+        # yt-dlp меняет расширение после конвертации
+        file_path = self._find_downloaded_file(info, "mp3")
+
+        if not file_path or not os.path.exists(file_path):
+            raise RuntimeError("Не удалось найти скачанный аудиофайл")
 
         # проверяем размер
         file_size = os.path.getsize(file_path)
@@ -130,67 +137,90 @@ class YouTubeDownloader:
         return DownloadResult(
             file_path=file_path,
             media_type="audio",
-            title="YouTube Audio",
+            title=info.get("title", "YouTube Audio"),
+            duration=info.get("duration"),
             format_key="audio",
         )
 
-    async def _request_cobalt(self, data: dict) -> str:
-        """Отправляет запрос к Cobalt API и возвращает URL файла"""
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
+    async def _download_with_quality(
+        self, url: str, quality: str
+    ) -> DownloadResult:
+        """Скачивает видео в указанном качестве"""
+        import yt_dlp
+
+        output_template = os.path.join(
+            self.download_dir, f"%(id)s_{quality}p.%(ext)s"
+        )
+
+        # приоритет h264 — совместим с MP4 без перекодировки
+        height = int(quality)
+        format_str = (
+            f"bestvideo[height<={height}][vcodec~='^(avc|h264)'][ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio"
+            f"/bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={height}]+bestaudio"
+            f"/best[height<={height}]"
+            f"/best"
+        )
+
+        ydl_opts = {
+            **self._base_opts(),
+            "format": format_str,
+            "outtmpl": output_template,
+            # объединяем видео и аудио в mp4
+            "merge_output_format": "mp4",
+            # перекодируем в h264 если скачался VP9/AV1
+            "postprocessors": [{
+                "key": "FFmpegVideoConvertor",
+                "preferedformat": "mp4",
+            }],
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.cobalt_url,
-                json=data,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                result = await resp.json()
-                logger.info("Cobalt ответ: status=%s", result.get("status"))
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, self._download, url, ydl_opts
+        )
 
-                status = result.get("status")
+        file_path = self._find_downloaded_file(info, "mp4")
 
-                if status in ("tunnel", "redirect"):
-                    return result["url"]
+        if not file_path or not os.path.exists(file_path):
+            raise RuntimeError("Не удалось найти скачанный видеофайл")
 
-                if status == "picker":
-                    # несколько вариантов — берём первый
-                    items = result.get("picker", [])
-                    if items:
-                        return items[0].get("url", "")
+        return DownloadResult(
+            file_path=file_path,
+            media_type="video",
+            title=info.get("title", "YouTube Video"),
+            duration=info.get("duration"),
+            format_key=f"video_{quality}",
+        )
 
-                if status == "error":
-                    error_code = result.get("error", {}).get("code", "unknown")
-                    raise RuntimeError(
-                        f"Cobalt ошибка: {error_code}"
-                    )
+    def _extract_info(self, url: str, opts: dict) -> dict:
+        """Извлекает метаданные (синхронно)"""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=False)
 
-                raise RuntimeError(
-                    f"Cobalt: неожиданный ответ ({status})"
-                )
+    def _download(self, url: str, opts: dict) -> dict:
+        """Скачивает видео/аудио (синхронно)"""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=True)
 
-    async def _download_file(self, url: str, file_path: str) -> None:
-        """Скачивает файл по URL во временную папку"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                timeout=aiohttp.ClientTimeout(total=300),
-            ) as resp:
-                if resp.status != 200:
-                    raise RuntimeError(
-                        f"Ошибка скачивания: HTTP {resp.status}"
-                    )
+    def _find_downloaded_file(self, info: dict, expected_ext: str) -> str | None:
+        """Ищет скачанный файл в папке загрузок"""
+        video_id = info.get("id", "")
 
-                with open(file_path, "wb") as f:
-                # читаем файл большими кусками для скорости
-                    async for chunk in resp.content.iter_chunked(65536):
-                        f.write(chunk)
+        # ищем файл по id видео
+        for filename in os.listdir(self.download_dir):
+            if video_id in filename and filename.endswith(f".{expected_ext}"):
+                return os.path.join(self.download_dir, filename)
 
-        logger.info("Скачан: %s (%.1f МБ)",
-                     file_path, os.path.getsize(file_path) / 1024 / 1024)
+        # если не нашли по id — берём последний файл
+        for filename in sorted(os.listdir(self.download_dir), reverse=True):
+            if filename.endswith(f".{expected_ext}"):
+                return os.path.join(self.download_dir, filename)
+
+        return None
 
     def cleanup(self, result: DownloadResult) -> None:
         """Удаляет временные файлы после отправки"""
