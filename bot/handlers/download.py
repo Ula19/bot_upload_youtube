@@ -1,8 +1,10 @@
 """Хэндлер скачивания — обрабатывает ссылки YouTube
 Флоу: ссылка → выбор формата → выбор качества → скачивание → отправка
 """
+import asyncio
 import logging
 import os
+import time
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -28,6 +30,20 @@ from bot.utils.helpers import clean_youtube_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# минимальный интервал обновления прогресса (Telegram лимит ~30 ред/мин)
+PROGRESS_UPDATE_INTERVAL = 4
+
+
+def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
+    """Рисует полоску прогресса"""
+    filled = int(percent / 100 * 15)
+    bar = "█" * filled + "░" * (15 - filled)
+    return (
+        f"⏳ Скачиваю... {percent}%\n"
+        f"{bar}\n"
+        f"{dl_mb:.0f} МБ / {total_mb:.0f} МБ"
+    )
 
 
 # FSM для сохранения URL между шагами выбора
@@ -178,13 +194,33 @@ async def _process_download(
     # скачиваем
     status_msg = await message.edit_text(t("download.processing", lang))
 
+    # callback для обновления прогресса
+    last_progress_update = {"time": 0}
+
+    def on_progress(dl_mb: float, total_mb: float, percent: int):
+        """yt-dlp вызывает это из другого потока, шедулим обновление в asyncio"""
+        now = time.time()
+        if now - last_progress_update["time"] < PROGRESS_UPDATE_INTERVAL:
+            return
+        last_progress_update["time"] = now
+
+        text = _make_progress_bar(percent, dl_mb, total_mb)
+        # шедулим в event loop (хук вызывается из другого потока)
+        try:
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(
+                _safe_edit(status_msg, text), loop
+            )
+        except Exception:
+            pass
+
     result = None
     try:
         if format_key == "audio":
-            result = await downloader.download_audio(url)
+            result = await downloader.download_audio(url, on_progress)
         else:
             quality = format_key.replace("video_", "")
-            result = await downloader.download_video(url, quality)
+            result = await downloader.download_video(url, quality, on_progress)
 
         file_id = await _send_media(message, result, status_msg, lang)
 
@@ -284,6 +320,14 @@ async def _send_cached(
     except Exception as e:
         logger.error(f"Ошибка отправки из кэша: {e}")
         await message.answer("⚠️ Кэш устарел. Отправь ссылку ещё раз.")
+
+
+async def _safe_edit(msg: Message, text: str) -> None:
+    """Безопасно обновляет сообщение (игнорирует ошибки лимита Telegram)"""
+    try:
+        await msg.edit_text(text)
+    except Exception:
+        pass
 
 
 def _format_duration(seconds: int) -> str:

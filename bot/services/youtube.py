@@ -6,7 +6,9 @@ import asyncio
 import logging
 import os
 import tempfile
+import time
 from dataclasses import dataclass
+from typing import Callable
 
 from bot.config import settings
 
@@ -33,6 +35,10 @@ class DownloadResult:
     title: str
     duration: int | None = None
     format_key: str = ""  # video_360, video_720, audio
+
+
+# тип для callback прогресса: (скачано_мб, всего_мб, процент)
+ProgressCallback = Callable[[float, float, int], None] | None
 
 
 class YouTubeDownloader:
@@ -89,10 +95,11 @@ class YouTubeDownloader:
         )
 
     async def download_video(
-        self, url: str, quality: str = "720"
+        self, url: str, quality: str = "720",
+        progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает видео в выбранном качестве"""
-        result = await self._download_with_quality(url, quality)
+        result = await self._download_with_quality(url, quality, progress_callback)
         file_size = os.path.getsize(result.file_path)
 
         if file_size > settings.max_file_size:
@@ -104,7 +111,10 @@ class YouTubeDownloader:
 
         return result
 
-    async def download_audio(self, url: str) -> DownloadResult:
+    async def download_audio(
+        self, url: str,
+        progress_callback: ProgressCallback = None,
+    ) -> DownloadResult:
         """Скачивает аудио (MP3, 128kbps)"""
         import yt_dlp
 
@@ -126,7 +136,7 @@ class YouTubeDownloader:
 
         loop = asyncio.get_event_loop()
         info = await loop.run_in_executor(
-            None, self._download, url, ydl_opts
+            None, self._download, url, ydl_opts, progress_callback
         )
 
         # yt-dlp меняет расширение после конвертации
@@ -152,7 +162,8 @@ class YouTubeDownloader:
         )
 
     async def _download_with_quality(
-        self, url: str, quality: str
+        self, url: str, quality: str,
+        progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает видео в указанном качестве"""
         import yt_dlp
@@ -187,7 +198,7 @@ class YouTubeDownloader:
 
         loop = asyncio.get_event_loop()
         info = await loop.run_in_executor(
-            None, self._download, url, ydl_opts
+            None, self._download, url, ydl_opts, progress_callback
         )
 
         file_path = self._find_downloaded_file(info, "mp4")
@@ -209,9 +220,33 @@ class YouTubeDownloader:
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=False)
 
-    def _download(self, url: str, opts: dict) -> dict:
+    def _download(self, url: str, opts: dict, progress_callback: ProgressCallback = None) -> dict:
         """Скачивает видео/аудио (синхронно)"""
         import yt_dlp
+
+        # добавляем хук прогресса если передан callback
+        if progress_callback:
+            last_update = {"time": 0}
+
+            def _hook(d):
+                if d["status"] != "downloading":
+                    return
+                # обновляем не чаще раз в 3 секунды
+                now = time.time()
+                if now - last_update["time"] < 3:
+                    return
+                last_update["time"] = now
+
+                downloaded = d.get("downloaded_bytes", 0)
+                total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                if total > 0:
+                    percent = int(downloaded / total * 100)
+                    dl_mb = downloaded / 1024 / 1024
+                    total_mb = total / 1024 / 1024
+                    progress_callback(dl_mb, total_mb, percent)
+
+            opts["progress_hooks"] = [_hook]
+
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=True)
 
