@@ -57,6 +57,8 @@ class YouTubeDownloader:
         opts = {
             "quiet": True,
             "no_warnings": True,
+            # yt-dlp 2026.03+ по умолчанию ищет deno, указываем nodejs явно
+            "js_runtimes": "nodejs",
         }
         if self._proxy:
             opts["proxy"] = self._proxy
