@@ -185,7 +185,8 @@ class YouTubeDownloader:
                     )
 
                 with open(file_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(8192):
+                # читаем файл большими кусками для скорости
+                    async for chunk in resp.content.iter_chunked(65536):
                         f.write(chunk)
 
         logger.info("Скачан: %s (%.1f МБ)",
