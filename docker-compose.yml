@@ -9,11 +9,20 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
+      cobalt:
+        condition: service_started
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
-      # cookies для обхода блокировки YouTube
-      - ./cookies.txt:/app/cookies.txt
+
+  # Cobalt API — скачивание YouTube без блокировок
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:10
+    restart: unless-stopped
+    environment:
+      API_URL: "http://cobalt:9000"
+    ports:
+      - "9000:9000"
 
   # Local Bot API — файлы до 2 ГБ без ограничений
   bot-api:
