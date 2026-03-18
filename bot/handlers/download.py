@@ -196,6 +196,8 @@ async def _process_download(
 
     # callback для обновления прогресса
     last_progress_update = {"time": 0}
+    # захватываем loop ДО executor (внутри потока get_event_loop() не работает)
+    loop = asyncio.get_event_loop()
 
     def on_progress(dl_mb: float, total_mb: float, percent: int):
         """yt-dlp вызывает это из другого потока, шедулим обновление в asyncio"""
@@ -207,7 +209,6 @@ async def _process_download(
         text = _make_progress_bar(percent, dl_mb, total_mb)
         # шедулим в event loop (хук вызывается из другого потока)
         try:
-            loop = asyncio.get_event_loop()
             asyncio.run_coroutine_threadsafe(
                 _safe_edit(status_msg, text), loop
             )
