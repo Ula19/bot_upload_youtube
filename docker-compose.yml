@@ -12,6 +12,8 @@ services:
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
+      # OAuth2 токен YouTube (настраивается один раз)
+      - ./oauth2_cache:/app/cache
 
 
   # Local Bot API — файлы до 2 ГБ без ограничений

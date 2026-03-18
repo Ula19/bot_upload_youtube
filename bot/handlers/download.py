@@ -27,12 +27,16 @@ from bot.keyboards.inline import (
 )
 from bot.services.youtube import FileTooLargeError, downloader
 from bot.utils.helpers import clean_youtube_url, is_youtube_url
+from bot.config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 # минимальный интервал обновления прогресса (Telegram лимит ~30 ред/мин)
 PROGRESS_UPDATE_INTERVAL = 4
+
+# чтобы не спамить админа — уведомляем только один раз
+_admin_notified = False
 
 
 def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
@@ -225,6 +229,10 @@ async def _process_download(
 
         file_id = await _send_media(message, result, status_msg, lang)
 
+        # если сработал fallback — уведомляем админа (один раз)
+        if downloader.auth_failed:
+            await _notify_admin_auth_failed(message.bot)
+
         # сохраняем в кэш
         if file_id:
             actual_format_key = result.format_key or format_key
@@ -363,3 +371,31 @@ def _get_error_text(error: str, lang: str = "ru") -> str:
         return t("error.age_restricted", lang)
     else:
         return t("error.generic", lang)
+
+
+async def _notify_admin_auth_failed(bot) -> None:
+    """Уведомляет админа что OAuth2 сломался (один раз)"""
+    global _admin_notified
+    if _admin_notified:
+        return
+    _admin_notified = True
+
+    text = (
+        "⚠️ <b>OAuth2 не работает!</b>\n\n"
+        "Бот переключился на fallback (ios/android).\n"
+        "Качество видео снижено (360-480p).\n\n"
+        "Для восстановления 720p запустите на сервере:\n"
+        "<code>docker compose exec bot python -m yt_dlp "
+        "--username oauth2 --password '' "
+        "--cache-dir /app/cache "
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ</code>\n\n"
+        "После — перезапустите бота:\n"
+        "<code>docker compose restart bot</code>"
+    )
+
+    for admin_id in settings.admin_id_list:
+        try:
+            await bot.send_message(admin_id, text, parse_mode="HTML")
+            logger.info("Админ %s уведомлён о проблеме OAuth2", admin_id)
+        except Exception as e:
+            logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
