@@ -42,34 +42,32 @@ ProgressCallback = Callable[[float, float, int], None] | None
 
 
 class YouTubeDownloader:
-    """Скачивает контент с YouTube через yt-dlp + резидентный прокси"""
-
-    # cookies для авторизации на YouTube
-    COOKIES_FILE = "/app/cookies.txt"
+    """Скачивает контент с YouTube через yt-dlp + резидентный прокси
+    Использует player_client ios/android — не требует cookies и аккаунта
+    """
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
-        self._cookies = self.COOKIES_FILE if os.path.exists(self.COOKIES_FILE) else None
         if self._proxy:
             logger.info("Прокси подключен: %s", self._proxy)
-        if self._cookies:
-            logger.info("Cookies подключены: %s", self._cookies)
-        if not self._proxy and not self._cookies:
-            logger.warning("Ни прокси, ни cookies — YouTube может блокировать")
+        else:
+            logger.warning("Прокси не настроен — YouTube может блокировать")
 
     def _base_opts(self) -> dict:
         """Общие настройки для всех запросов yt-dlp"""
         opts = {
             "quiet": True,
             "no_warnings": True,
-            # yt-dlp 2026.03+ по умолчанию ищет deno, указываем nodejs явно
-            "js_runtimes": {"nodejs": {}},
+            # притворяемся мобильным приложением YouTube — не нужны cookies
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["ios", "android"],
+                },
+            },
         }
         if self._proxy:
             opts["proxy"] = self._proxy
-        if self._cookies:
-            opts["cookiefile"] = self._cookies
         return opts
 
     async def get_info(self, url: str) -> VideoInfo:
