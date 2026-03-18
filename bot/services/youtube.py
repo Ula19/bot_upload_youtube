@@ -187,13 +187,8 @@ class YouTubeDownloader:
             **self._base_opts(),
             "format": format_str,
             "outtmpl": output_template,
-            # объединяем видео и аудио в mp4
+            # объединяем видео и аудио в mp4 (без перекодировки)
             "merge_output_format": "mp4",
-            # перекодируем в h264 если скачался VP9/AV1
-            "postprocessors": [{
-                "key": "FFmpegVideoConvertor",
-                "preferedformat": "mp4",
-            }],
         }
 
         loop = asyncio.get_event_loop()
