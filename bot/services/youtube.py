@@ -25,6 +25,8 @@ class VideoInfo:
     duration: int  # в секундах
     thumbnail: str | None = None
     uploader: str | None = None
+    # доступные качества: {"360": 30, "720": 100} (качество → примерный размер в МБ)
+    qualities: dict | None = None
 
 
 @dataclass
@@ -116,10 +118,9 @@ class YouTubeDownloader:
         return any(err in error_msg for err in _AUTH_ERRORS)
 
     async def get_info(self, url: str) -> VideoInfo:
-        """Получает метаданные видео без скачивания"""
+        """Получает метаданные видео + доступные качества с размерами"""
         import yt_dlp
 
-        # для инфо используем fallback (быстрее, не тратим OAuth2 лимит)
         ydl_opts = {
             **self._fallback_opts(),
             "skip_download": True,
@@ -131,12 +132,51 @@ class YouTubeDownloader:
             None, self._extract_info, url, ydl_opts
         )
 
+        # парсим доступные качества из форматов
+        qualities = self._parse_qualities(info)
+
         return VideoInfo(
             title=info.get("title", "Без названия"),
             duration=info.get("duration", 0),
             thumbnail=info.get("thumbnail"),
             uploader=info.get("uploader"),
+            qualities=qualities,
         )
+
+    def _parse_qualities(self, info: dict) -> dict:
+        """Парсит форматы и возвращает доступные качества с примерным размером"""
+        formats = info.get("formats", [])
+        duration = info.get("duration", 0) or 0
+        # нужные нам качества
+        target_heights = [360, 480, 720, 1080]
+        result = {}
+
+        for h in target_heights:
+            # ищем видео-формат с этой высотой
+            best_size = 0
+            for fmt in formats:
+                height = fmt.get("height") or 0
+                if height != h:
+                    continue
+                if fmt.get("vcodec", "none") == "none":
+                    continue
+                # размер из filesize или из битрейта
+                size = fmt.get("filesize") or fmt.get("filesize_approx") or 0
+                if not size and fmt.get("tbr") and duration:
+                    size = int(fmt["tbr"] * 1000 / 8 * duration)
+                if size > best_size:
+                    best_size = size
+
+            if best_size > 0:
+                # прибавляем ~10% на аудио-дорожку
+                total_mb = int(best_size * 1.1 / 1024 / 1024)
+                result[str(h)] = max(total_mb, 1)
+
+        # если ничего не нашли — даём дефолтные кнопки
+        if not result:
+            result = {"360": 0, "720": 0}
+
+        return result
 
     async def download_video(
         self, url: str, quality: str = "720",

@@ -87,30 +87,49 @@ def get_format_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     ])
 
 
-def get_quality_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    """Выбор качества видео"""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="360p",
-                callback_data="quality_360",
-                style="primary",
-                icon_custom_emoji_id=E_ID["camera"],
-            ),
-            InlineKeyboardButton(
-                text="720p",
-                callback_data="quality_720",
-                style="primary",
-                icon_custom_emoji_id=E_ID["camera"],
-            ),
-        ],
-        [InlineKeyboardButton(
-            text=t("btn.back", lang),
-            callback_data="back_to_menu",
-            style="danger",
-            icon_custom_emoji_id=E_ID["back"],
-        )],
-    ])
+def get_quality_keyboard(
+    lang: str = "ru", qualities: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """Выбор качества видео (динамический — показывает размер)"""
+    # дефолтные кнопки если нет инфо о форматах
+    if not qualities:
+        qualities = {"360": 0, "720": 0}
+
+    # сортируем по качеству (от меньшего к большему)
+    sorted_q = sorted(qualities.items(), key=lambda x: int(x[0]))
+
+    # раскладываем кнопки по 2 в ряд
+    rows = []
+    row = []
+    for quality, size_mb in sorted_q:
+        # текст кнопки: "720p (~100 МБ)" или просто "720p"
+        label = f"{quality}p"
+        if size_mb > 0:
+            label += f" (~{size_mb} МБ)"
+
+        row.append(InlineKeyboardButton(
+            text=label,
+            callback_data=f"quality_{quality}",
+            style="primary",
+            icon_custom_emoji_id=E_ID["camera"],
+        ))
+
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+
+    if row:
+        rows.append(row)
+
+    # кнопка назад
+    rows.append([InlineKeyboardButton(
+        text=t("btn.back", lang),
+        callback_data="back_to_menu",
+        style="danger",
+        icon_custom_emoji_id=E_ID["back"],
+    )])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def get_audio_suggest_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:

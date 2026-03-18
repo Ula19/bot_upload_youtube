@@ -85,6 +85,7 @@ async def handle_youtube_link(message: Message, state: FSMContext) -> None:
             url=clean_url,
             title=info.title,
             duration=info.duration,
+            qualities=info.qualities,
             msg_id=message.message_id,
         )
 
@@ -111,15 +112,17 @@ async def handle_youtube_link(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "fmt_video")
 async def choose_video_format(callback: CallbackQuery, state: FSMContext) -> None:
-    """Юзер выбрал видео — показываем качество"""
+    """Юзер выбрал видео — показываем качество с размерами"""
     async with async_session() as session:
         lang = await get_user_language(session, callback.from_user.id)
 
+    data = await state.get_data()
+    qualities = data.get("qualities")
     await state.set_state(DownloadStates.waiting_quality)
 
     await callback.message.edit_text(
         t("download.choose_quality", lang),
-        reply_markup=get_quality_keyboard(lang),
+        reply_markup=get_quality_keyboard(lang, qualities),
         parse_mode="HTML",
     )
     await callback.answer()
