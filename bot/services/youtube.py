@@ -72,10 +72,11 @@ class YouTubeDownloader:
         opts = {
             "quiet": True,
             "no_warnings": True,
-            # притворяемся мобильным приложением YouTube — не нужны cookies
+            # ios — обходит бот-проверку, web — даёт качественные форматы (720p h264)
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["ios", "android"],
+                    "player_client": ["ios", "web"],
+                    "player_skip": ["webpage"],
                 },
             },
         }
