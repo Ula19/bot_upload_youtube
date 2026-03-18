@@ -46,13 +46,26 @@ class YouTubeDownloader:
     Использует player_client ios/android — не требует cookies и аккаунта
     """
 
+    # пауза между запросами к YouTube (чтобы не получить бан)
+    _RATE_LIMIT_DELAY = 3
+
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
+        self._last_download_time = 0.0
         if self._proxy:
             logger.info("Прокси подключен: %s", self._proxy)
         else:
             logger.warning("Прокси не настроен — YouTube может блокировать")
+
+    async def _rate_limit(self):
+        """Ждём между запросами чтобы YouTube не заблокировал"""
+        now = time.time()
+        wait = self._RATE_LIMIT_DELAY - (now - self._last_download_time)
+        if wait > 0:
+            logger.info("Пауза %.1f сек (rate-limit)", wait)
+            await asyncio.sleep(wait)
+        self._last_download_time = time.time()
 
     def _base_opts(self) -> dict:
         """Общие настройки для всех запросов yt-dlp"""
@@ -97,6 +110,7 @@ class YouTubeDownloader:
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает видео в выбранном качестве"""
+        await self._rate_limit()
         result = await self._download_with_quality(url, quality, progress_callback)
         file_size = os.path.getsize(result.file_path)
 
@@ -114,6 +128,7 @@ class YouTubeDownloader:
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает аудио (MP3, 128kbps)"""
+        await self._rate_limit()
         import yt_dlp
 
         output_template = os.path.join(

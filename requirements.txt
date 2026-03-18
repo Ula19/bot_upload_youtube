@@ -4,6 +4,7 @@ SQLAlchemy==2.0.38
 asyncpg==0.30.0
 alembic==1.14.1
 yt-dlp>=2025.3.31
+yt-dlp-get-pot-rustypipe
 pydantic-settings==2.8.1
 
 # Утилиты
