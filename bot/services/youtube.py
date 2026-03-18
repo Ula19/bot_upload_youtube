@@ -43,11 +43,13 @@ class DownloadResult:
 ProgressCallback = Callable[[float, float, int], None] | None
 
 
-# ошибки которые означают "нужна авторизация"
+# ошибки которые означают "нужна авторизация" → переключаемся на fallback
 _AUTH_ERRORS = [
     "Sign in to confirm",
     "confirm you're not a bot",
     "This request was detected as a bot",
+    "OAuth is no longer supported",
+    "Login with OAuth",
 ]
 
 
