@@ -356,6 +356,8 @@ def _get_error_text(error: str, lang: str = "ru") -> str:
         return t("error.too_large", lang)
     elif "timeout" in error_lower:
         return t("error.timeout", lang)
+    elif "not available in your country" in error_lower:
+        return t("error.geo_blocked", lang)
     elif "age" in error_lower:
         return t("error.age_restricted", lang)
     else:

@@ -312,6 +312,11 @@ TRANSLATIONS = {
         "uz": f"{E['warning']} <b>Yosh cheklovi bilan video</b>\n\nAfsuski, bunday videolarni yuklab olish mumkin emas.",
         "en": f"{E['warning']} <b>Age-restricted video</b>\n\nUnfortunately, these videos cannot be downloaded.",
     },
+    "error.geo_blocked": {
+        "ru": f"{E['cross']} <b>Видео заблокировано в вашем регионе</b>\n\nАвтор ограничил доступ к видео по географии.",
+        "uz": f"{E['cross']} <b>Video sizning mintaqangizda bloklangan</b>\n\nMuallif videoga geografik cheklov qo'ygan.",
+        "en": f"{E['cross']} <b>Video is geo-blocked</b>\n\nThe uploader has restricted this video by region.",
+    },
     "error.too_large": {
         "ru": f"{E['package']} <b>Файл слишком большой</b>\n\nTelegram ограничивает размер файла до 50 МБ.",
         "uz": f"{E['package']} <b>Fayl juda katta</b>\n\nTelegram fayl hajmini 50 MB bilan cheklaydi.",
