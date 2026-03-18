@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     proxy_url: str = ""
 
     # кэш скачиваний (дни)
-    cache_ttl_days: int = 30
+    cache_ttl_days: int = 1
 
     # лимит файла (Local Bot API — 2 ГБ, обычный — 50 МБ)
     max_file_size: int = 2 * 1024 * 1024 * 1024  # 2 ГБ
