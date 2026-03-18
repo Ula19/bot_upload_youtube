@@ -72,11 +72,10 @@ class YouTubeDownloader:
         opts = {
             "quiet": True,
             "no_warnings": True,
-            # ios — обходит бот-проверку, web — даёт качественные форматы (720p h264)
+            # ios/android обходят бот-проверку без cookies
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["ios", "web"],
-                    "player_skip": ["webpage"],
+                    "player_client": ["ios", "android"],
                 },
             },
         }
@@ -186,13 +185,10 @@ class YouTubeDownloader:
             self.download_dir, f"%(id)s_{quality}p.%(ext)s"
         )
 
-        # приоритет h264 — совместим с MP4 без перекодировки
+        # берём лучшее доступное до нужного quality, без жёсткого h264
         height = int(quality)
         format_str = (
-            f"bestvideo[height<={height}][vcodec~='^(avc|h264)'][ext=mp4]+bestaudio[ext=m4a]"
-            f"/bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio"
-            f"/bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
-            f"/bestvideo[height<={height}]+bestaudio"
+            f"bestvideo[height<={height}]+bestaudio"
             f"/best[height<={height}]"
             f"/best"
         )
