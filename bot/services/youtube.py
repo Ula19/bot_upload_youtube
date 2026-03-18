@@ -72,10 +72,10 @@ class YouTubeDownloader:
         opts = {
             "quiet": True,
             "no_warnings": True,
-            # ios/android обходят бот-проверку без cookies
+            # tv — может давать h264 720p, ios — обход бот-проверки
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["ios", "android"],
+                    "player_client": ["tv", "ios"],
                 },
             },
         }
