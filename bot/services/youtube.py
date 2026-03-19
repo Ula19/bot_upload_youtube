@@ -71,9 +71,6 @@ class YouTubeDownloader:
         # флаг: POT сервер не работает → уведомить админа (один раз)
         self.auth_failed = False
 
-        # yt-dlp ищет плагины здесь
-        os.environ.setdefault("YDL_PLUGIN_DIRS", "/app/yt-dlp-plugins")
-
         if self._proxy:
             logger.info("Прокси подключен: %s", self._proxy)
         else:
