@@ -178,8 +178,11 @@ class YouTubeDownloader:
         for h in target_heights:
             best_size = 0
             for fmt in formats:
-                height = fmt.get("height") or 0
-                if height != h:
+                # для Shorts (вертикальных) берём меньшую сторону
+                fmt_h = fmt.get("height") or 0
+                fmt_w = fmt.get("width") or 0
+                short_side = min(fmt_h, fmt_w) if fmt_w else fmt_h
+                if short_side != h:
                     continue
                 if fmt.get("vcodec", "none") == "none":
                     continue
