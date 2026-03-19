@@ -98,7 +98,7 @@ class YouTubeDownloader:
             "quiet": True,
             "no_warnings": True,
             # JS challenge solver для deno (нужен для 720p DASH-форматов)
-            "remote_components": {"ejs": "github"},
+            "remote_components": ["ejs:github"],
         }
         if self._proxy:
             opts["proxy"] = self._proxy
