@@ -3,6 +3,7 @@
 """
 import logging
 import os
+import shutil
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -62,9 +63,14 @@ async def process_cookies_file(message: Message, state: FSMContext) -> None:
         # создаём папку если нет
         os.makedirs(COOKIES_DIR, exist_ok=True)
 
-        # скачиваем файл
+        # с Local Bot API файл уже на диске → просто копируем
         file = await message.bot.get_file(doc.file_id)
-        await message.bot.download_file(file.file_path, COOKIES_PATH)
+        local_path = file.file_path  # путь типа /var/lib/telegram-bot-api/.../file.txt
+        if os.path.isfile(local_path):
+            shutil.copy2(local_path, COOKIES_PATH)
+        else:
+            # обычный Bot API — скачиваем
+            await message.bot.download_file(file.file_path, COOKIES_PATH)
 
         # сбрасываем флаг auth_failed чтобы бот попробовал новые cookies
         downloader.auth_failed = False

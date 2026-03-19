@@ -14,6 +14,8 @@ services:
       - /tmp/yt_bot:/tmp/yt_bot
       # cookies для YouTube (обновляются через /update_cookies)
       - ./cookies:/app/cookies
+      # доступ к файлам Local Bot API (для /update_cookies)
+      - bot-api-data:/var/lib/telegram-bot-api
 
 
   # Local Bot API — файлы до 2 ГБ без ограничений
