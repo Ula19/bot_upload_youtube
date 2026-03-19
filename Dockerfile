@@ -1,9 +1,16 @@
 FROM python:3.12-slim
 
-# ffmpeg для конвертации, nodejs для yt-dlp, wget+unzip для плагина POT
+# ffmpeg для конвертации, wget+unzip для плагина POT и deno
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg nodejs wget unzip && \
+    apt-get install -y --no-install-recommends ffmpeg wget unzip curl && \
     rm -rf /var/lib/apt/lists/*
+
+# deno — JS-рантайм для yt-dlp (YouTube challenge + POT)
+RUN curl -fsSL https://dl.deno.land/release/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+    -o /tmp/deno.zip && \
+    unzip /tmp/deno.zip -d /usr/local/bin/ && \
+    chmod +x /usr/local/bin/deno && \
+    rm /tmp/deno.zip
 
 WORKDIR /app
 
