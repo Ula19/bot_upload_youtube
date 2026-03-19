@@ -55,29 +55,30 @@ _AUTH_ERRORS = [
 
 class YouTubeDownloader:
     """Скачивает YouTube через yt-dlp.
-    Основной метод — OAuth2 (720p h264), fallback — ios/android (без аккаунта).
+    Основной метод — PO Token (720p h264), fallback — ios/android (без аккаунта).
     """
 
     # пауза между запросами к YouTube (защита от rate-limit)
     _RATE_LIMIT_DELAY = 3
-    # путь к кэшу OAuth2 токена (volume в docker-compose)
-    _OAUTH2_CACHE = "/app/cache"
+    # URL POT-сервера (sidecar в docker-compose)
+    _POT_URL = "http://pot:4416"
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
         self._last_download_time = 0.0
-        # флаг: OAuth2 сломался → уведомить админа (один раз)
+        # флаг: POT сервер не работает → уведомить админа (один раз)
         self.auth_failed = False
+
+        # yt-dlp ищет плагины здесь
+        os.environ.setdefault("YDL_PLUGIN_DIRS", "/app/yt-dlp-plugins")
 
         if self._proxy:
             logger.info("Прокси подключен: %s", self._proxy)
         else:
             logger.warning("Прокси не настроен — YouTube может блокировать")
 
-        # проверяем есть ли OAuth2 кэш
-        has_cache = os.path.isdir(self._OAUTH2_CACHE)
-        logger.info("OAuth2 кэш: %s", "найден" if has_cache else "не найден (только fallback)")
+        logger.info("POT-сервер: %s", self._POT_URL)
 
     async def _rate_limit(self):
         """Ждём между запросами чтобы YouTube не заблокировал"""
@@ -96,12 +97,17 @@ class YouTubeDownloader:
         return opts
 
     def _auth_opts(self) -> dict:
-        """Настройки с OAuth2 — полные форматы (720p+ h264)"""
+        """Настройки с PO Token — полные форматы (720p+ h264)"""
         return {
             **self._common_opts(),
-            "cachedir": self._OAUTH2_CACHE,
-            "username": "oauth2",
-            "password": "",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web"],
+                },
+                "youtubepot-bgutilhttp": {
+                    "base_url": [self._POT_URL],
+                },
+            },
         }
 
     def _fallback_opts(self) -> dict:
@@ -184,11 +190,11 @@ class YouTubeDownloader:
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает видео: сначала OAuth2, при ошибке — fallback на ios"""
+        """Скачивает видео: сначала через POT, при ошибке — fallback на ios"""
         await self._rate_limit()
 
-        # пробуем через OAuth2 (если кэш есть и не сломан)
-        if not self.auth_failed and os.path.isdir(self._OAUTH2_CACHE):
+        # пробуем через POT (если сервер работает)
+        if not self.auth_failed:
             try:
                 result = await self._download_with_quality(
                     url, quality, progress_callback, use_auth=True
@@ -196,7 +202,7 @@ class YouTubeDownloader:
                 return self._check_size(result)
             except Exception as e:
                 if self._is_auth_error(str(e)):
-                    logger.warning("OAuth2 не работает, переключаюсь на fallback: %s", e)
+                    logger.warning("POT не работает, fallback: %s", e)
                     self.auth_failed = True
                 else:
                     raise
@@ -212,16 +218,15 @@ class YouTubeDownloader:
         self, url: str,
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает аудио: сначала OAuth2, при ошибке — fallback"""
+        """Скачивает аудио: сначала POT, при ошибке — fallback"""
         await self._rate_limit()
 
-        # пробуем через OAuth2
-        if not self.auth_failed and os.path.isdir(self._OAUTH2_CACHE):
+        if not self.auth_failed:
             try:
                 return await self._do_download_audio(url, progress_callback, use_auth=True)
             except Exception as e:
                 if self._is_auth_error(str(e)):
-                    logger.warning("OAuth2 не работает (аудио), fallback")
+                    logger.warning("POT не работает (аудио), fallback")
                     self.auth_failed = True
                 else:
                     raise

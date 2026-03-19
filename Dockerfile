@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
-# ffmpeg для конвертации, nodejs для yt-dlp (YouTube challenge)
+# ffmpeg для конвертации, nodejs для yt-dlp, wget+unzip для плагина POT
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg nodejs && \
+    apt-get install -y --no-install-recommends ffmpeg nodejs wget unzip && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -10,6 +10,13 @@ WORKDIR /app
 # сначала зависимости (кэшируется Docker слоем)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# плагин PO Token для yt-dlp (подключается к bgutil-pot серверу)
+RUN mkdir -p /app/yt-dlp-plugins && \
+    wget -qO /tmp/pot-plugin.zip \
+    https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/latest/download/bgutil-ytdlp-pot-provider-rs.zip && \
+    unzip -o /tmp/pot-plugin.zip -d /app/yt-dlp-plugins/ && \
+    rm /tmp/pot-plugin.zip
 
 # потом код
 COPY bot/ bot/
