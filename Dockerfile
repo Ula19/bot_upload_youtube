@@ -6,7 +6,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # deno — JS-рантайм для yt-dlp (YouTube challenge + POT)
-RUN curl -fsSL https://dl.deno.land/release/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
     -o /tmp/deno.zip && \
     unzip /tmp/deno.zip -d /usr/local/bin/ && \
     chmod +x /usr/local/bin/deno && \
