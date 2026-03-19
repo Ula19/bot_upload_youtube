@@ -50,7 +50,6 @@ _AUTH_ERRORS = [
     "This request was detected as a bot",
     "OAuth is no longer supported",
     "Login with OAuth",
-    "Requested format is not available",
 ]
 
 
@@ -295,20 +294,13 @@ class YouTubeDownloader:
         )
 
         height = int(quality)
-        # с OAuth2 — приоритет h264, без — берём что есть
-        if use_auth:
-            format_str = (
-                f"bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
-                f"/bestvideo[height<={height}]+bestaudio"
-                f"/best[height<={height}]"
-                f"/best"
-            )
-        else:
-            format_str = (
-                f"bestvideo[height<={height}]+bestaudio"
-                f"/best[height<={height}]"
-                f"/best"
-            )
+        # универсальный format_str: сначала h264, потом любой кодек
+        format_str = (
+            f"bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={height}]+bestaudio"
+            f"/best[height<={height}]"
+            f"/best"
+        )
 
         ydl_opts = {
             **base,
