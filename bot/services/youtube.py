@@ -43,13 +43,14 @@ class DownloadResult:
 ProgressCallback = Callable[[float, float, int], None] | None
 
 
-# ошибки которые означают "нужна авторизация" → переключаемся на fallback
+# ошибки при которых переключаемся на fallback
 _AUTH_ERRORS = [
     "Sign in to confirm",
     "confirm you're not a bot",
     "This request was detected as a bot",
     "OAuth is no longer supported",
     "Login with OAuth",
+    "Requested format is not available",
 ]
 
 
@@ -101,9 +102,6 @@ class YouTubeDownloader:
         return {
             **self._common_opts(),
             "extractor_args": {
-                "youtube": {
-                    "player_client": ["web"],
-                },
                 "youtubepot-bgutilhttp": {
                     "base_url": [self._POT_URL],
                 },
