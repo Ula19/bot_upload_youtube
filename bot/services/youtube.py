@@ -130,8 +130,10 @@ class YouTubeDownloader:
         """Получает метаданные видео + доступные качества с размерами"""
         import yt_dlp
 
+        # используем cookies если есть — покажет все качества (720p+)
+        base = self._auth_opts() if self.has_cookies() else self._fallback_opts()
         ydl_opts = {
-            **self._fallback_opts(),
+            **base,
             "skip_download": True,
             "ignore_no_formats_error": True,
         }
@@ -156,12 +158,24 @@ class YouTubeDownloader:
         """Парсит форматы и возвращает доступные качества с примерным размером"""
         formats = info.get("formats", [])
         duration = info.get("duration", 0) or 0
-        # нужные нам качества
+        # все нужные качества
         target_heights = [360, 480, 720, 1080]
         result = {}
 
+        # находим лучший аудио-поток (для DASH нужно прибавить его размер)
+        audio_size = 0
+        for fmt in formats:
+            if fmt.get("vcodec", "none") != "none":
+                continue
+            if fmt.get("acodec", "none") == "none":
+                continue
+            size = fmt.get("filesize") or fmt.get("filesize_approx") or 0
+            if not size and fmt.get("tbr") and duration:
+                size = int(fmt["tbr"] * 1000 / 8 * duration)
+            if size > audio_size:
+                audio_size = size
+
         for h in target_heights:
-            # ищем видео-формат с этой высотой
             best_size = 0
             for fmt in formats:
                 height = fmt.get("height") or 0
@@ -169,7 +183,6 @@ class YouTubeDownloader:
                     continue
                 if fmt.get("vcodec", "none") == "none":
                     continue
-                # размер из filesize или из битрейта
                 size = fmt.get("filesize") or fmt.get("filesize_approx") or 0
                 if not size and fmt.get("tbr") and duration:
                     size = int(fmt["tbr"] * 1000 / 8 * duration)
@@ -177,8 +190,9 @@ class YouTubeDownloader:
                     best_size = size
 
             if best_size > 0:
-                # прибавляем ~10% на аудио-дорожку
-                total_mb = int(best_size * 1.1 / 1024 / 1024)
+                # прибавляем аудио-дорожку
+                total = best_size + audio_size
+                total_mb = int(total / 1024 / 1024)
                 result[str(h)] = max(total_mb, 1)
 
         # если ничего не нашли — даём дефолтные кнопки
