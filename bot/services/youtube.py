@@ -199,10 +199,8 @@ class YouTubeDownloader:
                 return self._check_size(result)
             except Exception as e:
                 if self._is_auth_error(str(e)):
-                    logger.warning("POT не работает, fallback: %s", e)
-                    self.auth_failed = True
-                else:
-                    raise
+                    self.auth_failed = True  # постоянный fallback
+                logger.warning("POT не смог, пробую fallback: %s", e)
 
         # fallback — ios/android без аккаунта
         logger.info("Скачиваю через fallback (ios/android)")
@@ -223,10 +221,8 @@ class YouTubeDownloader:
                 return await self._do_download_audio(url, progress_callback, use_auth=True)
             except Exception as e:
                 if self._is_auth_error(str(e)):
-                    logger.warning("POT не работает (аудио), fallback")
                     self.auth_failed = True
-                else:
-                    raise
+                logger.warning("POT не смог (аудио), fallback: %s", e)
 
         return await self._do_download_audio(url, progress_callback, use_auth=False)
 
