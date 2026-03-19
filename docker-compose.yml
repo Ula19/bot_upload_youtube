@@ -50,6 +50,10 @@ services:
   pot:
     image: ghcr.io/jim60105/bgutil-pot:latest
     restart: unless-stopped
+    environment:
+      # прокси нужен — без него YouTube блокирует датацентр IP
+      HTTP_PROXY: ${PROXY_URL}
+      HTTPS_PROXY: ${PROXY_URL}
 
 volumes:
   postgres-data:

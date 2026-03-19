@@ -99,6 +99,9 @@ class YouTubeDownloader:
         return {
             **self._common_opts(),
             "extractor_args": {
+                "youtube": {
+                    "player_client": ["web"],
+                },
                 "youtubepot-bgutilhttp": {
                     "base_url": [self._POT_URL],
                 },
