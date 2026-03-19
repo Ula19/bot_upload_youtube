@@ -305,6 +305,8 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             video=file,
             caption=f"🎬 {result.title}",
             duration=int(result.duration) if result.duration else None,
+            width=result.width,
+            height=result.height,
         )
         return sent.video.file_id
 

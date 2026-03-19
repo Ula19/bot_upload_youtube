@@ -36,6 +36,8 @@ class DownloadResult:
     media_type: str       # video или audio
     title: str
     duration: int | None = None
+    width: int | None = None
+    height: int | None = None
     format_key: str = ""  # video_360, video_720, audio
 
 
@@ -341,6 +343,8 @@ class YouTubeDownloader:
             media_type="video",
             title=info.get("title", "YouTube Video"),
             duration=info.get("duration"),
+            width=info.get("width"),
+            height=info.get("height"),
             format_key=f"video_{quality}",
         )
 
