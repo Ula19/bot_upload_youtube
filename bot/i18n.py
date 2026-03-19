@@ -493,6 +493,7 @@ TRANSLATIONS = {
     "btn.admin_cancel_del": {"ru": "Отмена", "uz": "Bekor qilish", "en": "Cancel"},
     "btn.admin_panel": {"ru": "Админ-панель", "uz": "Admin panel", "en": "Admin panel"},
     "btn.admin_broadcast": {"ru": "Рассылка", "uz": "Xabar yuborish", "en": "Broadcast"},
+    "btn.admin_cookies": {"ru": "🍪 Cookies", "uz": "🍪 Cookies", "en": "🍪 Cookies"},
 
     # === Рассылка ===
     "admin.broadcast_prompt": {
@@ -516,6 +517,64 @@ TRANSLATIONS = {
         "ru": f"{E['chart']} <b>Рассылка завершена!</b>\n\n{E['check']} Доставлено: <b>{{success}}</b>\n{E['cross']} Ошибок: <b>{{failed}}</b>\n{E['users']} Всего: <b>{{total}}</b>",
         "uz": f"{E['chart']} <b>Xabar yuborish tugadi!</b>\n\n{E['check']} Yetkazildi: <b>{{success}}</b>\n{E['cross']} Xatolar: <b>{{failed}}</b>\n{E['users']} Jami: <b>{{total}}</b>",
         "en": f"{E['chart']} <b>Broadcast complete!</b>\n\n{E['check']} Delivered: <b>{{success}}</b>\n{E['cross']} Failed: <b>{{failed}}</b>\n{E['users']} Total: <b>{{total}}</b>",
+    },
+
+    # === Cookies ===
+    "admin.cookies_active": {
+        "ru": "✅ Активны — видео скачивается в 720p+",
+        "uz": "✅ Faol — video 720p+ sifatda yuklanmoqda",
+        "en": "✅ Active — downloading in 720p+",
+    },
+    "admin.cookies_missing": {
+        "ru": "❌ Не загружены — видео в 360p",
+        "uz": "❌ Yuklanmagan — video 360p sifatda",
+        "en": "❌ Not loaded — video at 360p",
+    },
+    "admin.cookies_expired": {
+        "ru": "⚠️ Протухли — нужно обновить!",
+        "uz": "⚠️ Muddati o'tgan — yangilash kerak!",
+        "en": "⚠️ Expired — needs update!",
+    },
+    "admin.cookies_info": {
+        "ru": (
+            "🍪 <b>YouTube Cookies</b>\n\n"
+            "Статус: {status}\n\n"
+            "<b>Как обновить (через Chrome):</b>\n\n"
+            "1️⃣ Открой Chrome и нажми <code>Ctrl+Shift+N</code> (инкогнито)\n"
+            "2️⃣ Зайди на youtube.com и войди в аккаунт\n"
+            '3️⃣ Перейди на youtube.com/robots.txt (важно!)\n'
+            '4️⃣ Нажми расширение "Get cookies.txt LOCALLY" → Export\n'
+            "5️⃣ <b>Сразу закрой</b> инкогнито окно!\n"
+            "6️⃣ Отправь /update_cookies и прикрепи файл\n\n"
+            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Установить расширение</a>\n\n'
+            "💡 Cookies живут 2-4 недели. Бот уведомит когда протухнут."
+        ),
+        "uz": (
+            "🍪 <b>YouTube Cookies</b>\n\n"
+            "Holat: {status}\n\n"
+            "<b>Qanday yangilash (Chrome orqali):</b>\n\n"
+            "1️⃣ Chrome'ni oching va <code>Ctrl+Shift+N</code> bosing (inkognito)\n"
+            "2️⃣ youtube.com ga kiring va hisobga kiring\n"
+            '3️⃣ youtube.com/robots.txt ga o\'ting (muhim!)\n'
+            '4️⃣ "Get cookies.txt LOCALLY" kengaytmasini bosing → Export\n'
+            "5️⃣ <b>Darhol yoping</b> inkognito oynani!\n"
+            "6️⃣ /update_cookies yuboring va faylni biriktiring\n\n"
+            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Kengaytmani o\'rnatish</a>\n\n'
+            "💡 Cookies 2-4 hafta ishlaydi. Bot muddati tugaganda xabar beradi."
+        ),
+        "en": (
+            "🍪 <b>YouTube Cookies</b>\n\n"
+            "Status: {status}\n\n"
+            "<b>How to update (via Chrome):</b>\n\n"
+            "1️⃣ Open Chrome, press <code>Ctrl+Shift+N</code> (incognito)\n"
+            "2️⃣ Go to youtube.com and sign in\n"
+            '3️⃣ Navigate to youtube.com/robots.txt (important!)\n'
+            '4️⃣ Click "Get cookies.txt LOCALLY" extension → Export\n'
+            "5️⃣ <b>Immediately close</b> the incognito window!\n"
+            "6️⃣ Send /update_cookies and attach the file\n\n"
+            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Install extension</a>\n\n'
+            "💡 Cookies last 2-4 weeks. Bot will notify when expired."
+        ),
     },
 }
 

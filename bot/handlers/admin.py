@@ -30,6 +30,7 @@ from bot.keyboards.admin import (
     get_cancel_keyboard,
     get_channels_keyboard,
 )
+from bot.services.youtube import downloader
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -74,6 +75,35 @@ async def cmd_admin(message: Message) -> None:
         t("admin.title", lang),
         reply_markup=get_admin_keyboard(lang),
     )
+
+
+# === Кнопка «Обновить Cookies» ===
+
+@router.callback_query(F.data == "admin_cookies")
+async def admin_cookies_info(callback: CallbackQuery) -> None:
+    """Показывает статус cookies и инструкцию по обновлению"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer(f"{E['lock']} Нет доступа")
+        return
+
+    lang = await _get_lang(callback.from_user.id)
+
+    # определяем статус cookies
+    if downloader.auth_failed:
+        status = t("admin.cookies_expired", lang)
+    elif downloader.has_cookies():
+        status = t("admin.cookies_active", lang)
+    else:
+        status = t("admin.cookies_missing", lang)
+
+    text = t("admin.cookies_info", lang, status=status)
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_admin_keyboard(lang),
+        disable_web_page_preview=True,
+    )
+    await callback.answer()
 
 
 # === Статистика ===

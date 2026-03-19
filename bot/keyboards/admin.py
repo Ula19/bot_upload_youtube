@@ -21,6 +21,12 @@ def get_admin_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
             icon_custom_emoji_id=E_ID["megaphone"],
         )],
         [InlineKeyboardButton(
+            text=t("btn.admin_cookies", lang),
+            callback_data="admin_cookies",
+            style="primary",
+            icon_custom_emoji_id=E_ID["lock"],
+        )],
+        [InlineKeyboardButton(
             text=t("btn.admin_broadcast", lang),
             callback_data="admin_broadcast",
             style="danger",
