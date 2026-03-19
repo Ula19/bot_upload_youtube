@@ -9,11 +9,11 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
-      pot:
-        condition: service_started
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
+      # cookies для YouTube (обновляются через /update_cookies)
+      - ./cookies:/app/cookies
 
 
   # Local Bot API — файлы до 2 ГБ без ограничений
@@ -45,15 +45,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  # PO Token провайдер — генерирует токены для YouTube (обход бот-детекта)
-  pot:
-    image: ghcr.io/jim60105/bgutil-pot:latest
-    restart: unless-stopped
-    environment:
-      # прокси нужен — без него YouTube блокирует датацентр IP
-      HTTP_PROXY: ${PROXY_URL}
-      HTTPS_PROXY: ${PROXY_URL}
 
 volumes:
   postgres-data:

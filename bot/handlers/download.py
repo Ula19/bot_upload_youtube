@@ -377,28 +377,27 @@ def _get_error_text(error: str, lang: str = "ru") -> str:
 
 
 async def _notify_admin_auth_failed(bot) -> None:
-    """Уведомляет админа что OAuth2 сломался (один раз)"""
+    """Уведомляет админа что cookies протухли (один раз)"""
     global _admin_notified
     if _admin_notified:
         return
     _admin_notified = True
 
     text = (
-        "⚠️ <b>OAuth2 не работает!</b>\n\n"
-        "Бот переключился на fallback (ios/android).\n"
+        "⚠️ <b>Cookies протухли!</b>\n\n"
+        "Бот переключился на ios/android.\n"
         "Качество видео снижено (360-480p).\n\n"
-        "Для восстановления 720p запустите на сервере:\n"
-        "<code>docker compose exec bot python -m yt_dlp "
-        "--username oauth2 --password '' "
-        "--cache-dir /app/cache "
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ</code>\n\n"
-        "После — перезапустите бота:\n"
-        "<code>docker compose restart bot</code>"
+        "Для восстановления 720p:\n"
+        "1. Откройте Firefox в приватном режиме\n"
+        "2. Войдите в YouTube\n"
+        '3. Экспортируйте cookies расширением "Get cookies.txt LOCALLY"\n'
+        "4. Отправьте файл боту командой /update_cookies"
     )
 
     for admin_id in settings.admin_id_list:
         try:
             await bot.send_message(admin_id, text, parse_mode="HTML")
-            logger.info("Админ %s уведомлён о проблеме OAuth2", admin_id)
+            logger.info("Админ %s уведомлён о протухших cookies", admin_id)
         except Exception as e:
             logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
+

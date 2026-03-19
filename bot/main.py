@@ -54,9 +54,10 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
 
     # подключаем хэндлеры (порядок важен!)
-    from bot.handlers import start, download, admin
+    from bot.handlers import start, download, admin, cookies
     dp.include_router(start.router)
     dp.include_router(admin.router)
+    dp.include_router(cookies.router)
     dp.include_router(download.router)  # последний — ловит все текстовые сообщения
 
     # подключаем мидлвари

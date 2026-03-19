@@ -43,31 +43,30 @@ class DownloadResult:
 ProgressCallback = Callable[[float, float, int], None] | None
 
 
-# ошибки при которых переключаемся на fallback
+# ошибки при которых cookies протухли → fallback на ios/android
 _AUTH_ERRORS = [
     "Sign in to confirm",
     "confirm you're not a bot",
     "This request was detected as a bot",
-    "OAuth is no longer supported",
-    "Login with OAuth",
+    "Login required",
+    "cookies",
 ]
 
 
 class YouTubeDownloader:
     """Скачивает YouTube через yt-dlp.
-    Основной метод — PO Token (720p h264), fallback — ios/android (без аккаунта).
+    Основной метод — cookies (720p), fallback — ios/android (360p).
     """
 
-    # пауза между запросами к YouTube (защита от rate-limit)
     _RATE_LIMIT_DELAY = 3
-    # URL POT-сервера (sidecar в docker-compose)
-    _POT_URL = "http://pot:4416"
+    # путь к cookies файлу (volume в docker-compose)
+    _COOKIES_PATH = "/app/cookies/cookies.txt"
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
         self._last_download_time = 0.0
-        # флаг: POT сервер не работает → уведомить админа (один раз)
+        # флаг: cookies протухли → уведомить админа (один раз)
         self.auth_failed = False
 
         if self._proxy:
@@ -75,7 +74,14 @@ class YouTubeDownloader:
         else:
             logger.warning("Прокси не настроен — YouTube может блокировать")
 
-        logger.info("POT-сервер: %s", self._POT_URL)
+        if self.has_cookies():
+            logger.info("Cookies: найдены → 720p")
+        else:
+            logger.info("Cookies: не найдены → только ios/android (360p)")
+
+    def has_cookies(self) -> bool:
+        """Есть ли cookies файл?"""
+        return os.path.isfile(self._COOKIES_PATH)
 
     async def _rate_limit(self):
         """Ждём между запросами чтобы YouTube не заблокировал"""
@@ -88,28 +94,16 @@ class YouTubeDownloader:
 
     def _common_opts(self) -> dict:
         """Общие настройки для всех запросов"""
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            # скачиваем JS challenge solver скрипты (нужны для n-challenge)
-            "remote_components": {"ejs": "github"},
-        }
+        opts = {"quiet": True, "no_warnings": True}
         if self._proxy:
             opts["proxy"] = self._proxy
         return opts
 
     def _auth_opts(self) -> dict:
-        """Настройки с PO Token — полные форматы (720p+ h264)"""
+        """Настройки с cookies — полные форматы (720p+ h264)"""
         return {
             **self._common_opts(),
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web"],
-                },
-                "youtubepot-bgutilhttp": {
-                    "base_url": [self._POT_URL],
-                },
-            },
+            "cookiefile": self._COOKIES_PATH,
         }
 
     def _fallback_opts(self) -> dict:
@@ -192,11 +186,11 @@ class YouTubeDownloader:
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает видео: сначала через POT, при ошибке — fallback на ios"""
+        """Скачивает видео: cookies (720p) → fallback ios/android (360p)"""
         await self._rate_limit()
 
-        # пробуем через POT (если сервер работает)
-        if not self.auth_failed:
+        # пробуем через cookies (если есть и не протухли)
+        if self.has_cookies() and not self.auth_failed:
             try:
                 result = await self._download_with_quality(
                     url, quality, progress_callback, use_auth=True
@@ -205,10 +199,10 @@ class YouTubeDownloader:
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True  # постоянный fallback
-                logger.warning("POT не смог, пробую fallback: %s", e)
+                logger.warning("Cookies не сработали, fallback: %s", e)
 
         # fallback — ios/android без аккаунта
-        logger.info("Скачиваю через fallback (ios/android)")
+        logger.info("Скачиваю через ios/android")
         result = await self._download_with_quality(
             url, quality, progress_callback, use_auth=False
         )
@@ -218,16 +212,16 @@ class YouTubeDownloader:
         self, url: str,
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает аудио: сначала POT, при ошибке — fallback"""
+        """Скачивает аудио: cookies → fallback ios/android"""
         await self._rate_limit()
 
-        if not self.auth_failed:
+        if self.has_cookies() and not self.auth_failed:
             try:
                 return await self._do_download_audio(url, progress_callback, use_auth=True)
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
-                logger.warning("POT не смог (аудио), fallback: %s", e)
+                logger.warning("Cookies не сработали (аудио), fallback: %s", e)
 
         return await self._do_download_audio(url, progress_callback, use_auth=False)
 
