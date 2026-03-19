@@ -18,9 +18,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# плагин PO Token для yt-dlp (устанавливаем как Python-пакет)
-RUN pip install --no-cache-dir \
-    https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/latest/download/bgutil-ytdlp-pot-provider-rs.zip
+# плагин PO Token для yt-dlp (прямо в site-packages чтобы Python нашёл)
+RUN SITE_PKG=$(python -c "import site; print(site.getsitepackages()[0])") && \
+    wget -qO /tmp/pot-plugin.zip \
+    https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/latest/download/bgutil-ytdlp-pot-provider-rs.zip && \
+    unzip -o /tmp/pot-plugin.zip -d "$SITE_PKG/" && \
+    rm /tmp/pot-plugin.zip
 
 # потом код
 COPY bot/ bot/
