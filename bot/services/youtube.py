@@ -88,7 +88,12 @@ class YouTubeDownloader:
 
     def _common_opts(self) -> dict:
         """Общие настройки для всех запросов"""
-        opts = {"quiet": True, "no_warnings": True}
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            # скачиваем JS challenge solver скрипты (нужны для n-challenge)
+            "remote_components": {"ejs": "github"},
+        }
         if self._proxy:
             opts["proxy"] = self._proxy
         return opts
