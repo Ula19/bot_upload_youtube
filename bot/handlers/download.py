@@ -301,9 +301,10 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             pass
 
     if result.media_type == "video":
+        promo = t("download.promo", lang, bot_username=settings.bot_username)
         sent = await message.answer_video(
             video=file,
-            caption=f"🎬 {result.title}",
+            caption=f"🎬 {result.title}{promo}",
             duration=int(result.duration) if result.duration else None,
             width=result.width,
             height=result.height,
@@ -311,9 +312,10 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
         return sent.video.file_id
 
     elif result.media_type == "audio":
+        promo = t("download.promo", lang, bot_username=settings.bot_username)
         sent = await message.answer_audio(
             audio=file,
-            caption=f"🎵 {result.title}",
+            caption=f"🎵 {result.title}{promo}",
             duration=int(result.duration) if result.duration else None,
             title=result.title,
         )

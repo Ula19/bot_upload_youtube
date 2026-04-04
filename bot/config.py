@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     db_user: str = "postgres"
     db_password: str = ""
 
+    # юзернейм бота (для рекламной подписи)
+    bot_username: str = ""
+
     # админы бота (через запятую в .env)
     admin_ids: str = ""
     admin_username: str = "admin"

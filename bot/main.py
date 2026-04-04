@@ -90,6 +90,11 @@ async def main() -> None:
         bot_info = await bot.get_me()
         logger.info(f"Бот @{bot_info.username} запущен!")
 
+        # ставим дефолтное меню команд (глобально, ru — для новых юзеров)
+        from bot.utils.commands import set_default_commands
+        await set_default_commands(bot)
+        logger.info("Дефолтное меню команд установлено")
+
     @dp.shutdown()
     async def on_shutdown() -> None:
         # убираем crash-flag при нормальном завершении

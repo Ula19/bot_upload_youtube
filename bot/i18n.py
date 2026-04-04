@@ -576,6 +576,40 @@ TRANSLATIONS = {
             "💡 Cookies last 2-4 weeks. Bot will notify when expired."
         ),
     },
+
+    # === Рекламная подпись ===
+    "download.promo": {
+        "ru": f"\n\n{E['download']} Скачивай бесплатно через @{{bot_username}}",
+        "uz": f"\n\n{E['download']} @{{bot_username}} orqali bepul yuklab oling",
+        "en": f"\n\n{E['download']} Download for free via @{{bot_username}}",
+    },
+
+    # === Описания команд бота (для меню Telegram) ===
+    "cmd.start": {
+        "ru": "Запустить бота",
+        "uz": "Botni boshlash",
+        "en": "Start the bot",
+    },
+    "cmd.menu": {
+        "ru": "Главное меню",
+        "uz": "Asosiy menyu",
+        "en": "Main menu",
+    },
+    "cmd.profile": {
+        "ru": "Мой профиль",
+        "uz": "Mening profilim",
+        "en": "My profile",
+    },
+    "cmd.help": {
+        "ru": "Помощь",
+        "uz": "Yordam",
+        "en": "Help",
+    },
+    "cmd.language": {
+        "ru": "Сменить язык",
+        "uz": "Tilni o'zgartirish",
+        "en": "Change language",
+    },
 }
 
 

@@ -2,7 +2,7 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -46,6 +46,10 @@ async def cmd_start(message: Message) -> None:
         ),
         parse_mode="HTML",
     )
+
+    # ставим персональное меню на язык юзера
+    from bot.utils.commands import set_user_commands
+    await set_user_commands(message.bot, message.from_user.id, lang)
 
 
 @router.callback_query(F.data == "back_to_menu")
@@ -171,6 +175,10 @@ async def set_language(callback: CallbackQuery) -> None:
     )
     await callback.answer()
 
+    # обновляем персональное меню на новый язык
+    from bot.utils.commands import set_user_commands
+    await set_user_commands(callback.bot, callback.from_user.id, lang)
+
 
 # === Проверка подписки ===
 
@@ -235,3 +243,64 @@ async def check_subscription(
                 )
             except Exception as e:
                 logger.error(f"Ошибка обработки pending_url: {e}")
+
+
+# === Хэндлеры команд нативного меню ===
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message, state: FSMContext) -> None:
+    """Команда /menu — главное меню"""
+    await state.clear()
+    async with async_session() as session:
+        lang = await get_user_language(session, message.from_user.id)
+    await message.answer(
+        t("start.welcome", lang, name=message.from_user.first_name),
+        reply_markup=get_start_keyboard(user_id=message.from_user.id, lang=lang),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message) -> None:
+    """Команда /profile — профиль юзера"""
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session=session,
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            full_name=message.from_user.full_name,
+        )
+        lang = user.language or "ru"
+    await message.answer(
+        t("profile.title", lang,
+          full_name=message.from_user.full_name,
+          user_id=message.from_user.id,
+          downloads=user.download_count),
+        reply_markup=get_back_keyboard(lang),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message) -> None:
+    """Команда /help — помощь"""
+    async with async_session() as session:
+        lang = await get_user_language(session, message.from_user.id)
+    await message.answer(
+        t("help.text", lang, admin_username=settings.admin_username),
+        reply_markup=get_back_keyboard(lang),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("language"))
+async def cmd_language(message: Message) -> None:
+    """Команда /language — смена языка"""
+    async with async_session() as session:
+        lang = await get_user_language(session, message.from_user.id)
+    await message.answer(
+        t("lang.choose", lang),
+        reply_markup=get_language_keyboard(),
+        parse_mode="HTML",
+    )
+
