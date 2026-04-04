@@ -39,8 +39,8 @@ PROGRESS_UPDATE_INTERVAL = 4
 # чтобы не спамить админа — уведомляем только один раз
 _admin_notified = False
 
-# максимум 10 одновременных скачиваний — защита от перегрузки сервера
-_download_semaphore = asyncio.Semaphore(10)
+# максимум 30 одновременных скачиваний — сервер мощный (8ГБ ОЗУ, 6.4ГБ свободно)
+_download_semaphore = asyncio.Semaphore(30)
 
 
 def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
