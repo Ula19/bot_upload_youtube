@@ -29,7 +29,7 @@ services:
       TELEGRAM_API_HASH: ${API_HASH}
       TELEGRAM_LOCAL: 1
     ports:
-      - "8081:8081"
+      - "${BOT_API_PORT:-8081}:8081"
     volumes:
       - bot-api-data:/var/lib/telegram-bot-api
       - /tmp/yt_bot:/tmp/yt_bot
@@ -41,7 +41,7 @@ services:
     read_only: true
     restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "${COBALT_PORT:-9000}:9000"
     environment:
       API_URL: "http://cobalt:9000/"
       # генератор poToken (вместо cookies)
