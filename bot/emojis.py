@@ -46,6 +46,7 @@ E_ID = {
 # HTML-теги для использования в тексте сообщений
 E = {
     "download": '<tg-emoji emoji-id="5258336354642697821">📥</tg-emoji>',
+    "audio": '<tg-emoji emoji-id="5258289810082111221">🎵</tg-emoji>',
     "profile": '<tg-emoji emoji-id="5258362837411045098">👤</tg-emoji>',
     "book": '<tg-emoji emoji-id="5258328383183396223">📖</tg-emoji>',
     "star": '<tg-emoji emoji-id="5258185631355378853">⭐</tg-emoji>',
