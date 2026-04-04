@@ -42,13 +42,14 @@ services:
     init: true
     read_only: true
     restart: unless-stopped
+    env_file: .env
     ports:
       - "${COBALT_PORT:-9000}:9000"
     environment:
       API_URL: "http://cobalt:9000/"
       # прокси для YouTube (резидентный IP обходит блокировку без cookies)
-      HTTP_PROXY: "http://${PROXY_IP}:${PROXY_PORT}"
-      HTTPS_PROXY: "http://${PROXY_IP}:${PROXY_PORT}"
+      HTTP_PROXY: "${PROXY_URL}"
+      HTTPS_PROXY: "${PROXY_URL}"
 
   # PostgreSQL
   postgres:
