@@ -521,23 +521,23 @@ TRANSLATIONS = {
 
     # === Cookies ===
     "admin.cookies_active": {
-        "ru": "✅ Активны — видео скачивается в 720p+",
-        "uz": "✅ Faol — video 720p+ sifatda yuklanmoqda",
-        "en": "✅ Active — downloading in 720p+",
+        "ru": f"{E['check']} Активны — видео скачивается в 720p+",
+        "uz": f"{E['check']} Faol — video 720p+ sifatda yuklanmoqda",
+        "en": f"{E['check']} Active — downloading in 720p+",
     },
     "admin.cookies_missing": {
-        "ru": "❌ Не загружены — видео в 360p",
-        "uz": "❌ Yuklanmagan — video 360p sifatda",
-        "en": "❌ Not loaded — video at 360p",
+        "ru": f"{E['cross']} Не загружены — видео в 360p",
+        "uz": f"{E['cross']} Yuklanmagan — video 360p sifatda",
+        "en": f"{E['cross']} Not loaded — video at 360p",
     },
     "admin.cookies_expired": {
-        "ru": "⚠️ Протухли — нужно обновить!",
-        "uz": "⚠️ Muddati o'tgan — yangilash kerak!",
-        "en": "⚠️ Expired — needs update!",
+        "ru": f"{E['warning']} Протухли — нужно обновить!",
+        "uz": f"{E['warning']} Muddati o'tgan — yangilash kerak!",
+        "en": f"{E['warning']} Expired — needs update!",
     },
     "admin.cookies_info": {
         "ru": (
-            "🍪 <b>YouTube Cookies</b>\n\n"
+            f"🍪 <b>YouTube Cookies</b>\n\n"
             "Статус: {status}\n\n"
             "<b>Как обновить (через Chrome):</b>\n\n"
             "1️⃣ Открой Chrome и нажми <code>Ctrl+Shift+N</code> (инкогнито)\n"
@@ -546,11 +546,11 @@ TRANSLATIONS = {
             '4️⃣ Нажми расширение "Get cookies.txt LOCALLY" → Export\n'
             "5️⃣ <b>Сразу закрой</b> инкогнито окно!\n"
             "6️⃣ Отправь /update_cookies и прикрепи файл\n\n"
-            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Установить расширение</a>\n\n'
-            "💡 Cookies живут 2-4 недели. Бот уведомит когда протухнут."
+            f'{E["lightning"]} <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Установить расширение</a>\n\n'
+            f"{E['bulb']} Cookies живут 2-4 недели. Бот уведомит когда протухнут."
         ),
         "uz": (
-            "🍪 <b>YouTube Cookies</b>\n\n"
+            f"🍪 <b>YouTube Cookies</b>\n\n"
             "Holat: {status}\n\n"
             "<b>Qanday yangilash (Chrome orqali):</b>\n\n"
             "1️⃣ Chrome'ni oching va <code>Ctrl+Shift+N</code> bosing (inkognito)\n"
@@ -559,11 +559,11 @@ TRANSLATIONS = {
             '4️⃣ "Get cookies.txt LOCALLY" kengaytmasini bosing → Export\n'
             "5️⃣ <b>Darhol yoping</b> inkognito oynani!\n"
             "6️⃣ /update_cookies yuboring va faylni biriktiring\n\n"
-            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Kengaytmani o\'rnatish</a>\n\n'
-            "💡 Cookies 2-4 hafta ishlaydi. Bot muddati tugaganda xabar beradi."
+            f'{E["lightning"]} <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Kengaytmani o\'rnatish</a>\n\n'
+            f"{E['bulb']} Cookies 2-4 hafta ishlaydi. Bot muddati tugaganda xabar beradi."
         ),
         "en": (
-            "🍪 <b>YouTube Cookies</b>\n\n"
+            f"🍪 <b>YouTube Cookies</b>\n\n"
             "Status: {status}\n\n"
             "<b>How to update (via Chrome):</b>\n\n"
             "1️⃣ Open Chrome, press <code>Ctrl+Shift+N</code> (incognito)\n"
@@ -572,8 +572,8 @@ TRANSLATIONS = {
             '4️⃣ Click "Get cookies.txt LOCALLY" extension → Export\n'
             "5️⃣ <b>Immediately close</b> the incognito window!\n"
             "6️⃣ Send /update_cookies and attach the file\n\n"
-            '⚡ <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Install extension</a>\n\n'
-            "💡 Cookies last 2-4 weeks. Bot will notify when expired."
+            f'{E["lightning"]} <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc">Install extension</a>\n\n'
+            f"{E['bulb']} Cookies last 2-4 weeks. Bot will notify when expired."
         ),
     },
 

@@ -11,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from bot.config import settings
+from bot.emojis import E
 from bot.services.youtube import downloader
 
 logger = logging.getLogger(__name__)
@@ -31,12 +32,12 @@ async def cmd_update_cookies(message: Message, state: FSMContext) -> None:
     """Команда /update_cookies — начинаем процесс обновления"""
     # только админы могут обновлять cookies
     if message.from_user.id not in settings.admin_id_list:
-        await message.answer("🚫 Только администратор может обновить cookies.")
+        await message.answer(f"{E['ban']} Только администратор может обновить cookies.")
         return
 
     await state.set_state(CookiesStates.waiting_file)
     await message.answer(
-        "📂 <b>Отправьте файл cookies.txt</b>\n\n"
+        f"{E['folder']} <b>Отправьте файл cookies.txt</b>\n\n"
         "Как получить:\n"
         '1. Откройте Firefox в <b>приватном</b> режиме\n'
         '2. Войдите в <a href="https://youtube.com">YouTube</a>\n'
@@ -56,7 +57,7 @@ async def process_cookies_file(message: Message, state: FSMContext) -> None:
 
     # проверяем что это текстовый файл
     if doc.file_size > 1_000_000:  # 1 МБ макс
-        await message.answer("❌ Файл слишком большой. cookies.txt обычно < 100 КБ")
+        await message.answer(f"{E['cross']} Файл слишком большой. cookies.txt обычно < 100 КБ")
         return
 
     try:
@@ -80,12 +81,12 @@ async def process_cookies_file(message: Message, state: FSMContext) -> None:
             content = f.read()
         if ".youtube.com" not in content:
             await message.answer(
-                "⚠️ Файл сохранён, но не похож на YouTube cookies.\n"
+                f"{E['warning']} Файл сохранён, но не похож на YouTube cookies.\n"
                 "Убедитесь что вы экспортировали cookies с youtube.com"
             )
         else:
             await message.answer(
-                "✅ <b>Cookies обновлены!</b>\n\n"
+                f"{E['check']} <b>Cookies обновлены!</b>\n\n"
                 "Теперь видео будет скачиваться в 720p+ качестве.\n"
                 "Cookies обычно живут 2-4 недели.",
                 parse_mode="HTML",
@@ -94,7 +95,7 @@ async def process_cookies_file(message: Message, state: FSMContext) -> None:
 
     except Exception as e:
         logger.error("Ошибка сохранения cookies: %s", e)
-        await message.answer(f"❌ Ошибка: {e}")
+        await message.answer(f"{E['cross']} Ошибка: {e}")
     finally:
         await state.clear()
 
@@ -104,4 +105,4 @@ async def process_cookies_not_file(message: Message) -> None:
     """Юзер отправил не файл"""
     if message.text and message.text.startswith("/cancel"):
         return
-    await message.answer("📂 Отправьте именно <b>файл</b> cookies.txt", parse_mode="HTML")
+    await message.answer(f"{E['folder']} Отправьте именно <b>файл</b> cookies.txt", parse_mode="HTML")

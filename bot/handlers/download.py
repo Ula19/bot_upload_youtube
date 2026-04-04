@@ -45,7 +45,7 @@ def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
     filled = int(percent / 100 * 15)
     bar = "█" * filled + "░" * (15 - filled)
     return (
-        f"⏳ Скачиваю... {percent}%\n"
+        f"{E['clock']} Скачиваю... {percent}%\n"
         f"{bar}\n"
         f"{dl_mb:.0f} МБ / {total_mb:.0f} МБ"
     )
@@ -140,7 +140,7 @@ async def download_audio(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
     if not url:
-        await callback.message.answer("❌ Ссылка не найдена, отправь заново")
+        await callback.message.answer(f"{E['cross']} Ссылка не найдена, отправь заново")
         return
 
     async with async_session() as session:
@@ -163,7 +163,7 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
     if not url:
-        await callback.message.answer("❌ Ссылка не найдена, отправь заново")
+        await callback.message.answer(f"{E['cross']} Ссылка не найдена, отправь заново")
         return
 
     async with async_session() as session:
@@ -331,12 +331,12 @@ async def _send_cached(
     """Отправляет из кэша по file_id"""
     try:
         if media_type == "video":
-            await message.answer_video(video=file_id, caption="🎬 YouTube Video")
+            await message.answer_video(video=file_id, caption=f"{E['video']} YouTube Video")
         elif media_type == "audio":
-            await message.answer_audio(audio=file_id, caption="🎵 YouTube Audio")
+            await message.answer_audio(audio=file_id, caption=f"{E['audio']} YouTube Audio")
     except Exception as e:
         logger.error(f"Ошибка отправки из кэша: {e}")
-        await message.answer("⚠️ Кэш устарел. Отправь ссылку ещё раз.")
+        await message.answer(f"{E['warning']} Кэш устарел. Отправь ссылку ещё раз.")
 
 
 async def _safe_edit(msg: Message, text: str) -> None:
@@ -389,7 +389,7 @@ async def _notify_admin_auth_failed(bot) -> None:
     _admin_notified = True
 
     text = (
-        "⚠️ <b>Cookies протухли!</b>\n\n"
+        f"{E['warning']} <b>Cookies протухли!</b>\n\n"
         "Бот переключился на ios/android.\n"
         "Качество видео снижено (360-480p).\n\n"
         "Для восстановления 720p:\n"

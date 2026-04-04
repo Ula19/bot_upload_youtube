@@ -14,6 +14,7 @@ from bot.database.crud import (
     update_user_language,
 )
 from bot.i18n import detect_language, t
+from bot.emojis import E
 from bot.keyboards.inline import (
     get_back_keyboard,
     get_language_keyboard,
@@ -76,7 +77,7 @@ async def open_admin_panel(callback: CallbackQuery) -> None:
     from bot.keyboards.admin import get_admin_keyboard
 
     if callback.from_user.id not in settings.admin_id_list:
-        await callback.answer("🚫 Нет доступа")
+        await callback.answer(f"{E['ban']} Нет доступа")
         return
 
     async with async_session() as session:

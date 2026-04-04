@@ -37,6 +37,8 @@ E_ID = {
     "eye": "5253959125838090076",
     "search": "5429571366384842791",
     "trash": "5258130763148172425",
+    "ban": "5275969776668134187",      # ⛔️
+    "lightning": "5258152182150077732",  # ⚡️
     # флаги из пака FlagsEmoji
     "flag_ru": "5398017006165305287",
     "flag_uz": "5445378486711623503",
@@ -76,4 +78,6 @@ E = {
     "refresh": '<tg-emoji emoji-id="5258420634785947640">🔄</tg-emoji>',
     "eye": '<tg-emoji emoji-id="5253959125838090076">👁</tg-emoji>',
     "search": '<tg-emoji emoji-id="5429571366384842791">🔍</tg-emoji>',
+    "ban": '<tg-emoji emoji-id="5275969776668134187">⛔️</tg-emoji>',
+    "lightning": '<tg-emoji emoji-id="5258152182150077732">⚡️</tg-emoji>',
 }
