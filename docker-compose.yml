@@ -37,20 +37,30 @@ services:
       - /tmp/yt_bot:/tmp/yt_bot
 
   # Cobalt API — скачивание YouTube без cookies
+  # Трафик проксируется через redsocks (прозрачно, без HTTP_PROXY)
   cobalt:
     image: ghcr.io/imputnet/cobalt:11
     init: true
     restart: unless-stopped
-    env_file: .env
     ports:
       - "${COBALT_PORT:-9000}:9000"
     environment:
       API_URL: "http://cobalt:9000/"
-      # прокси для YouTube (резидентный IP обходит блокировку без cookies)
-      HTTP_PROXY: "${PROXY_URL}"
-      HTTPS_PROXY: "${PROXY_URL}"
     tmpfs:
       - /tmp:size=2G
+
+  # Прозрачный прокси — весь трафик Cobalt идёт через резидентный IP
+  redsocks:
+    image: ncarlier/redsocks
+    restart: unless-stopped
+    network_mode: "service:cobalt"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      PROXY_SERVER: ${PROXY_IP:-127.0.0.1}
+      PROXY_PORT: ${PROXY_PORT:-1080}
+      PROXY_TYPE: http-connect
 
   # PostgreSQL
   postgres:
