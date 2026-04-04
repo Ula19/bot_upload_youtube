@@ -40,7 +40,6 @@ services:
   cobalt:
     image: ghcr.io/imputnet/cobalt:11
     init: true
-    read_only: true
     restart: unless-stopped
     env_file: .env
     ports:
@@ -50,6 +49,8 @@ services:
       # прокси для YouTube (резидентный IP обходит блокировку без cookies)
       HTTP_PROXY: "${PROXY_URL}"
       HTTPS_PROXY: "${PROXY_URL}"
+    tmpfs:
+      - /tmp:size=2G
 
   # PostgreSQL
   postgres:
