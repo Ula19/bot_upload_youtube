@@ -39,8 +39,8 @@ PROGRESS_UPDATE_INTERVAL = 4
 # чтобы не спамить админа — уведомляем только один раз
 _admin_notified = False
 
-# максимум 3 одновременных скачивания — защита от перегрузки сервера
-_download_semaphore = asyncio.Semaphore(3)
+# максимум 10 одновременных скачиваний — защита от перегрузки сервера
+_download_semaphore = asyncio.Semaphore(10)
 
 
 def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
@@ -201,12 +201,6 @@ async def _process_download(
         logger.info(f"Кэш найден для {url} [{format_key}]")
         await _send_cached(message, cached.file_id, cached.media_type)
         return
-
-    # если все 3 слота заняты — предупреждаем юзера
-    if _download_semaphore.locked():
-        queue_msg = await message.edit_text(t("download.in_queue", lang))
-    else:
-        queue_msg = None
 
     async with _download_semaphore:
         # скачиваем
