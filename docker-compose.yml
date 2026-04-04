@@ -51,16 +51,15 @@ services:
 
   # Прозрачный прокси — весь трафик Cobalt идёт через резидентный IP
   redsocks:
-    image: ncarlier/redsocks
+    build: ./redsocks
     restart: unless-stopped
     network_mode: "service:cobalt"
     cap_add:
       - NET_ADMIN
       - NET_RAW
     environment:
-      PROXY_SERVER: ${PROXY_IP:-127.0.0.1}
-      PROXY_PORT: ${PROXY_PORT:-1080}
-      PROXY_TYPE: http-connect
+      PROXY_IP: ${PROXY_IP}
+      PROXY_PORT: ${PROXY_PORT}
 
   # PostgreSQL
   postgres:
