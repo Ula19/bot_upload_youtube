@@ -1,6 +1,6 @@
-"""Сервис скачивания YouTube — через yt-dlp + прокси
-Поддерживает: видео (MP4), аудио (MP3), Shorts
-Автопонижение качества при превышении лимита
+"""Сервис скачивания YouTube — Cobalt API + yt-dlp fallback
+Cobalt = основной метод (без cookies, все качества)
+yt-dlp = fallback (если Cobalt недоступен)
 """
 import asyncio
 import logging
@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from bot.config import settings
+from bot.services.cobalt import CobaltError, cobalt_client
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +148,8 @@ class YouTubeDownloader:
         """Получает метаданные видео + доступные качества с размерами"""
         import yt_dlp
 
-        # используем cookies если есть — покажет все качества (720p+)
-        base = self._auth_opts() if self.has_cookies() else self._fallback_opts()
+        # пробуем с cookies (покажет все качества)
+        base = self._auth_opts() if (self.has_cookies() and not self.auth_failed) else self._fallback_opts()
         ydl_opts = {
             **base,
             "skip_download": True,
@@ -163,6 +164,13 @@ class YouTubeDownloader:
         # парсим доступные качества из форматов
         qualities = self._parse_qualities(info)
 
+        # если Cobalt доступен — показываем все стандартные качества
+        # (Cobalt скачает любое, даже если yt-dlp не видит форматы без cookies)
+        if cobalt_client._available is not False:
+            for q in ["360", "480", "720", "1080", "1440"]:
+                if q not in qualities:
+                    qualities[q] = 0  # размер неизвестен
+
         return VideoInfo(
             title=info.get("title", "Без названия"),
             duration=info.get("duration", 0),
@@ -176,7 +184,7 @@ class YouTubeDownloader:
         formats = info.get("formats", [])
         duration = info.get("duration", 0) or 0
         # все нужные качества
-        target_heights = [360, 480, 720, 1080]
+        target_heights = [360, 480, 720, 1080, 1440]
         result = {}
 
         # находим лучший аудио-поток (для DASH нужно прибавить его размер)
@@ -225,11 +233,18 @@ class YouTubeDownloader:
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает видео: cookies (720p) → fallback ios/android (360p)"""
-        self._cleanup_old_files()  # чистим мёртвые файлы перед каждой загрузкой
-        await self._rate_limit()
+        """Скачивает видео: Cobalt → cookies → ios/android"""
+        self._cleanup_old_files()
 
-        # пробуем через cookies (если есть и не протухли)
+        # 1. Cobalt API — основной метод (без cookies)
+        try:
+            result = await self._download_via_cobalt(url, quality, "video")
+            return self._check_size(result)
+        except Exception as e:
+            logger.warning("Cobalt не сработал, fallback на yt-dlp: %s", e)
+
+        # 2. yt-dlp с cookies
+        await self._rate_limit()
         if self.has_cookies() and not self.auth_failed:
             try:
                 result = await self._download_with_quality(
@@ -238,10 +253,10 @@ class YouTubeDownloader:
                 return self._check_size(result)
             except Exception as e:
                 if self._is_auth_error(str(e)):
-                    self.auth_failed = True  # постоянный fallback
+                    self.auth_failed = True
                 logger.warning("Cookies не сработали, fallback: %s", e)
 
-        # fallback — ios/android без аккаунта
+        # 3. yt-dlp ios/android (последний шанс)
         logger.info("Скачиваю через ios/android")
         result = await self._download_with_quality(
             url, quality, progress_callback, use_auth=False
@@ -252,10 +267,17 @@ class YouTubeDownloader:
         self, url: str,
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает аудио: cookies → fallback ios/android"""
-        self._cleanup_old_files()  # чистим мёртвые файлы перед каждой загрузкой
-        await self._rate_limit()
+        """Скачивает аудио: Cobalt → cookies → ios/android"""
+        self._cleanup_old_files()
 
+        # 1. Cobalt API
+        try:
+            return await self._download_via_cobalt(url, "audio", "audio")
+        except Exception as e:
+            logger.warning("Cobalt не сработал (аудио), fallback на yt-dlp: %s", e)
+
+        # 2. yt-dlp с cookies
+        await self._rate_limit()
         if self.has_cookies() and not self.auth_failed:
             try:
                 return await self._do_download_audio(url, progress_callback, use_auth=True)
@@ -264,7 +286,33 @@ class YouTubeDownloader:
                     self.auth_failed = True
                 logger.warning("Cookies не сработали (аудио), fallback: %s", e)
 
+        # 3. yt-dlp ios/android
         return await self._do_download_audio(url, progress_callback, use_auth=False)
+
+    async def _download_via_cobalt(
+        self, url: str, quality: str, media_type: str,
+    ) -> DownloadResult:
+        """Скачивает через Cobalt API и возвращает DownloadResult"""
+        if media_type == "audio":
+            data = await cobalt_client.download_audio(url)
+        else:
+            data = await cobalt_client.download_video(url, quality)
+
+        # получаем размеры и длительность из файла (ffprobe)
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(
+            None, cobalt_client.get_media_info, data["file_path"]
+        )
+
+        return DownloadResult(
+            file_path=data["file_path"],
+            media_type=data["media_type"],
+            title="YouTube Media",
+            duration=info.get("duration"),
+            width=info.get("width") or None,
+            height=info.get("height") or None,
+            format_key=data["format_key"],
+        )
 
     async def _do_download_audio(
         self, url: str, progress_callback: ProgressCallback, use_auth: bool,

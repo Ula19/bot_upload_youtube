@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # прокси для YouTube (резидентный IP)
     proxy_url: str = ""
 
+    # Cobalt API (скачивание без cookies)
+    cobalt_api_url: str = "http://cobalt:9000/"
+
     # кэш скачиваний (дни)
     cache_ttl_days: int = 1
 

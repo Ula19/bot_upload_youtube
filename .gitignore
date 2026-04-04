@@ -27,6 +27,7 @@ downloads/
 # Dolt database files (added by bd init)
 .dolt/
 .beads/
+.claude/
 *.db
 
 # Markdown не отслеживаем (кроме README.md)
@@ -40,3 +41,4 @@ test_local.py
 # alembic (если не нужно отслеживать)
 # alembic/versions/*.py
 SECURITY_AUDIT.md
+CLAUDE.md

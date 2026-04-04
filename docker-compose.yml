@@ -9,6 +9,8 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
+      cobalt:
+        condition: service_started
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
@@ -31,6 +33,25 @@ services:
     volumes:
       - bot-api-data:/var/lib/telegram-bot-api
       - /tmp/yt_bot:/tmp/yt_bot
+
+  # Cobalt API — скачивание YouTube без cookies
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:11
+    init: true
+    read_only: true
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      API_URL: "http://cobalt:9000/"
+      # генератор poToken (вместо cookies)
+      YOUTUBE_SESSION_SERVER: "http://yt-session:8080"
+
+  # Генератор YouTube poToken — обходит ботовую защиту
+  yt-session:
+    image: ghcr.io/imputnet/yt-session-generator:webserver
+    init: true
+    restart: unless-stopped
 
   # PostgreSQL
   postgres:
