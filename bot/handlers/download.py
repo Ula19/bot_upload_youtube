@@ -28,6 +28,7 @@ from bot.keyboards.inline import (
 from bot.services.youtube import FileTooLargeError, downloader
 from bot.utils.helpers import clean_youtube_url, is_youtube_url
 from bot.config import settings
+from bot.emojis import E
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -304,7 +305,7 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
         promo = t("download.promo", lang, bot_username=settings.bot_username)
         sent = await message.answer_video(
             video=file,
-            caption=f"🎬 {result.title}{promo}",
+            caption=f"{E['video']} {result.title}{promo}",
             duration=int(result.duration) if result.duration else None,
             width=result.width,
             height=result.height,
