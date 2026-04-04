@@ -46,8 +46,9 @@ services:
       - "${COBALT_PORT:-9000}:9000"
     environment:
       API_URL: "http://cobalt:9000/"
-      # используем iOS клиент YouTube (работает без poToken и cookies)
-      CUSTOM_INNERTUBE_CLIENT: "IOS"
+      # прокси для YouTube (резидентный IP обходит блокировку без cookies)
+      HTTP_PROXY: "http://${PROXY_IP}:${PROXY_PORT}"
+      HTTPS_PROXY: "http://${PROXY_IP}:${PROXY_PORT}"
 
   # PostgreSQL
   postgres:
