@@ -39,6 +39,9 @@ PROGRESS_UPDATE_INTERVAL = 4
 # чтобы не спамить админа — уведомляем только один раз
 _admin_notified = False
 
+# максимум 3 одновременных скачивания — защита от перегрузки сервера
+_download_semaphore = asyncio.Semaphore(3)
+
 
 def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
     """Рисует полоску прогресса"""
@@ -199,93 +202,101 @@ async def _process_download(
         await _send_cached(message, cached.file_id, cached.media_type)
         return
 
-    # скачиваем
-    status_msg = await message.edit_text(t("download.processing", lang))
+    # если все 3 слота заняты — предупреждаем юзера
+    if _download_semaphore.locked():
+        queue_msg = await message.edit_text(t("download.in_queue", lang))
+    else:
+        queue_msg = None
 
-    # callback для обновления прогресса
-    last_progress_update = {"time": 0}
-    # захватываем loop ДО executor (внутри потока get_event_loop() не работает)
-    loop = asyncio.get_event_loop()
+    async with _download_semaphore:
+        # скачиваем
+        status_msg = await message.edit_text(t("download.processing", lang))
 
-    def on_progress(dl_mb: float, total_mb: float, percent: int):
-        """yt-dlp вызывает это из другого потока, шедулим обновление в asyncio"""
-        now = time.time()
-        if now - last_progress_update["time"] < PROGRESS_UPDATE_INTERVAL:
-            return
-        last_progress_update["time"] = now
+        # callback для обновления прогресса
+        last_progress_update = {"time": 0}
+        # захватываем loop ДО executor (внутри потока get_event_loop() не работает)
+        loop = asyncio.get_event_loop()
 
-        text = _make_progress_bar(percent, dl_mb, total_mb)
-        # шедулим в event loop (хук вызывается из другого потока)
+        def on_progress(dl_mb: float, total_mb: float, percent: int):
+            """yt-dlp вызывает это из другого потока, шедулим обновление в asyncio"""
+            now = time.time()
+            if now - last_progress_update["time"] < PROGRESS_UPDATE_INTERVAL:
+                return
+            last_progress_update["time"] = now
+
+            text = _make_progress_bar(percent, dl_mb, total_mb)
+            # шедулим в event loop (хук вызывается из другого потока)
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    _safe_edit(status_msg, text), loop
+                )
+            except Exception:
+                pass
+
+        result = None
         try:
-            asyncio.run_coroutine_threadsafe(
-                _safe_edit(status_msg, text), loop
+            if format_key == "audio":
+                result = await downloader.download_audio(url, on_progress)
+            else:
+                quality = format_key.replace("video_", "")
+                result = await downloader.download_video(url, quality, on_progress)
+
+            file_id = await _send_media(message, result, status_msg, lang)
+
+            # если сработал fallback — уведомляем админа (один раз)
+            if downloader.auth_failed:
+                await _notify_admin_auth_failed(message.bot)
+
+            # сохраняем в кэш
+            if file_id:
+                actual_format_key = result.format_key or format_key
+                async with async_session() as session:
+                    await save_download(
+                        session=session,
+                        youtube_url=url,
+                        format_key=actual_format_key,
+                        file_id=file_id,
+                        media_type=result.media_type,
+                    )
+                    user_obj = await get_or_create_user(
+                        session=session,
+                        telegram_id=user.id,
+                        username=user.username,
+                        full_name=user.full_name,
+                    )
+                    user_obj.download_count += 1
+                    await session.commit()
+
+            # удаляем статусное сообщение
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+
+        except FileTooLargeError:
+            # видео слишком большое даже в 360p — предлагаем аудио
+            await status_msg.edit_text(
+                t("error.too_large_suggest_audio", lang),
+                reply_markup=get_audio_suggest_keyboard(lang),
+                parse_mode="HTML",
             )
-        except Exception:
-            pass
+            # восстанавливаем FSM с URL чтобы кнопка "Скачать аудио" работала
+            if state:
+                await state.set_state(DownloadStates.waiting_format)
+                await state.update_data(url=url)
 
-    result = None
-    try:
-        if format_key == "audio":
-            result = await downloader.download_audio(url, on_progress)
-        else:
-            quality = format_key.replace("video_", "")
-            result = await downloader.download_video(url, quality, on_progress)
+        except Exception as e:
+            logger.error(f"Ошибка скачивания {url}: {e}")
+            error_text = _get_error_text(str(e), lang)
+            try:
+                await status_msg.edit_text(error_text)
+            except Exception:
+                await message.answer(error_text)
 
-        file_id = await _send_media(message, result, status_msg, lang)
+        finally:
+            if result:
+                downloader.cleanup(result)
 
-        # если сработал fallback — уведомляем админа (один раз)
-        if downloader.auth_failed:
-            await _notify_admin_auth_failed(message.bot)
-
-        # сохраняем в кэш
-        if file_id:
-            actual_format_key = result.format_key or format_key
-            async with async_session() as session:
-                await save_download(
-                    session=session,
-                    youtube_url=url,
-                    format_key=actual_format_key,
-                    file_id=file_id,
-                    media_type=result.media_type,
-                )
-                user_obj = await get_or_create_user(
-                    session=session,
-                    telegram_id=user.id,
-                    username=user.username,
-                    full_name=user.full_name,
-                )
-                user_obj.download_count += 1
-                await session.commit()
-
-        # удаляем статусное сообщение
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-
-    except FileTooLargeError:
-        # видео слишком большое даже в 360p — предлагаем аудио
-        await status_msg.edit_text(
-            t("error.too_large_suggest_audio", lang),
-            reply_markup=get_audio_suggest_keyboard(lang),
-            parse_mode="HTML",
-        )
-        # восстанавливаем FSM с URL чтобы кнопка "Скачать аудио" работала
-        if state:
-            await state.set_state(DownloadStates.waiting_format)
-            await state.update_data(url=url)
-
-    except Exception as e:
-        logger.error(f"Ошибка скачивания {url}: {e}")
-        error_text = _get_error_text(str(e), lang)
-        try:
-            await status_msg.edit_text(error_text)
-        except Exception:
-            await message.answer(error_text)
-
-    finally:
-        if result:
-            downloader.cleanup(result)
 
 
 async def _send_media(message: Message, result, status_msg=None, lang="ru") -> str | None:

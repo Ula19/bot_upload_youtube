@@ -94,6 +94,21 @@ class YouTubeDownloader:
             await asyncio.sleep(wait)
         self._last_download_time = time.time()
 
+    def _cleanup_old_files(self, max_age_minutes: int = 30) -> None:
+        """Удаляет файлы старше max_age_minutes минут из папки загрузок.
+        Убирает мёртвые файлы оставшиеся после ошибок скачивания.
+        """
+        now = time.time()
+        cutoff = now - max_age_minutes * 60
+        try:
+            for filename in os.listdir(self.download_dir):
+                filepath = os.path.join(self.download_dir, filename)
+                if os.path.isfile(filepath) and os.path.getmtime(filepath) < cutoff:
+                    os.remove(filepath)
+                    logger.info("Очистка старого файла: %s", filename)
+        except OSError as e:
+            logger.warning("Ошибка при очистке temp директории: %s", e)
+
     def _common_opts(self) -> dict:
         """Общие настройки для всех запросов"""
         opts = {
@@ -211,6 +226,7 @@ class YouTubeDownloader:
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает видео: cookies (720p) → fallback ios/android (360p)"""
+        self._cleanup_old_files()  # чистим мёртвые файлы перед каждой загрузкой
         await self._rate_limit()
 
         # пробуем через cookies (если есть и не протухли)
@@ -237,6 +253,7 @@ class YouTubeDownloader:
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
         """Скачивает аудио: cookies → fallback ios/android"""
+        self._cleanup_old_files()  # чистим мёртвые файлы перед каждой загрузкой
         await self._rate_limit()
 
         if self.has_cookies() and not self.auth_failed:
