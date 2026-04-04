@@ -11,6 +11,8 @@ services:
         condition: service_started
       cobalt:
         condition: service_started
+    environment:
+      - COBALT_API_URL=http://cobalt:9000/
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
@@ -44,14 +46,8 @@ services:
       - "${COBALT_PORT:-9000}:9000"
     environment:
       API_URL: "http://cobalt:9000/"
-      # генератор poToken (вместо cookies)
-      YOUTUBE_SESSION_SERVER: "http://yt-session:8080"
-
-  # Генератор YouTube poToken — обходит ботовую защиту
-  yt-session:
-    image: ghcr.io/imputnet/yt-session-generator:webserver
-    init: true
-    restart: unless-stopped
+      # используем iOS клиент YouTube (работает без poToken и cookies)
+      CUSTOM_INNERTUBE_CLIENT: "IOS"
 
   # PostgreSQL
   postgres:
