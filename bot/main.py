@@ -87,13 +87,6 @@ async def main() -> None:
         with open(CRASH_FLAG, "w") as f:
             f.write("running")
 
-        # проверяем доступность Cobalt API
-        from bot.services.cobalt import cobalt_client
-        if await cobalt_client.is_available():
-            logger.info("Cobalt API: доступен → основной метод скачивания")
-        else:
-            logger.warning("Cobalt API: недоступен → только yt-dlp")
-
         bot_info = await bot.get_me()
         logger.info(f"Бот @{bot_info.username} запущен!")
 

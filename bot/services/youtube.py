@@ -1,6 +1,7 @@
-"""Сервис скачивания YouTube — Cobalt API + yt-dlp fallback
-Cobalt = основной метод (без cookies, все качества)
-yt-dlp = fallback (если Cobalt недоступен)
+"""Сервис скачивания YouTube — yt-dlp через Cloudflare WARP
+WARP = бесплатный VPN, YouTube не блокирует IP Cloudflare.
+Cookies не нужны — WARP обходит блокировку датацентровых IP.
+Fallback: cookies → ios/android (если WARP упал).
 """
 import asyncio
 import logging
@@ -11,12 +12,14 @@ from dataclasses import dataclass
 from typing import Callable
 
 from bot.config import settings
-from bot.services.cobalt import CobaltError, cobalt_client
 
 logger = logging.getLogger(__name__)
 
 # лимит файла (Local Bot API — 2 ГБ)
 MAX_FILE_SIZE = settings.max_file_size
+
+# WARP SOCKS5 прокси (контейнер warp в docker-compose)
+WARP_PROXY = "socks5://warp:9091"
 
 
 @dataclass
@@ -57,48 +60,37 @@ _AUTH_ERRORS = [
 
 
 class YouTubeDownloader:
-    """Скачивает YouTube через yt-dlp.
-    Основной метод — cookies (720p), fallback — ios/android (360p).
+    """Скачивает YouTube через yt-dlp + Cloudflare WARP.
+    Основной метод — WARP (все качества без cookies).
+    Fallback — cookies или ios/android.
     """
 
     _RATE_LIMIT_DELAY = 3
-    # путь к cookies файлу (volume в docker-compose)
     _COOKIES_PATH = "/app/cookies/cookies.txt"
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
-        self._proxy = settings.proxy_url or None
         self._last_download_time = 0.0
-        # флаг: cookies протухли → уведомить админа (один раз)
         self.auth_failed = False
 
-        if self._proxy:
-            logger.info("Прокси подключен: %s", self._proxy)
-        else:
-            logger.warning("Прокси не настроен — YouTube может блокировать")
+        logger.info("WARP прокси: %s", WARP_PROXY)
 
         if self.has_cookies():
-            logger.info("Cookies: найдены → 720p")
+            logger.info("Cookies: найдены (fallback)")
         else:
-            logger.info("Cookies: не найдены → только ios/android (360p)")
+            logger.info("Cookies: не найдены")
 
     def has_cookies(self) -> bool:
-        """Есть ли cookies файл?"""
         return os.path.isfile(self._COOKIES_PATH)
 
     async def _rate_limit(self):
-        """Ждём между запросами чтобы YouTube не заблокировал"""
         now = time.time()
         wait = self._RATE_LIMIT_DELAY - (now - self._last_download_time)
         if wait > 0:
-            logger.info("Пауза %.1f сек (rate-limit)", wait)
             await asyncio.sleep(wait)
         self._last_download_time = time.time()
 
     def _cleanup_old_files(self, max_age_minutes: int = 30) -> None:
-        """Удаляет файлы старше max_age_minutes минут из папки загрузок.
-        Убирает мёртвые файлы оставшиеся после ошибок скачивания.
-        """
         now = time.time()
         cutoff = now - max_age_minutes * 60
         try:
@@ -108,31 +100,27 @@ class YouTubeDownloader:
                     os.remove(filepath)
                     logger.info("Очистка старого файла: %s", filename)
         except OSError as e:
-            logger.warning("Ошибка при очистке temp директории: %s", e)
+            logger.warning("Ошибка при очистке: %s", e)
 
-    def _common_opts(self) -> dict:
-        """Общие настройки для всех запросов"""
-        opts = {
+    def _warp_opts(self) -> dict:
+        """Настройки через WARP — все качества без cookies"""
+        return {
             "quiet": True,
             "no_warnings": True,
-            # JS challenge solver для deno (нужен для 720p DASH-форматов)
-            "remote_components": ["ejs:github"],
+            "proxy": WARP_PROXY,
         }
-        if self._proxy:
-            opts["proxy"] = self._proxy
-        return opts
 
-    def _auth_opts(self) -> dict:
-        """Настройки с cookies — полные форматы (720p+ h264)"""
+    def _cookies_opts(self) -> dict:
+        """Fallback: cookies + WARP"""
         return {
-            **self._common_opts(),
+            **self._warp_opts(),
             "cookiefile": self._COOKIES_PATH,
         }
 
     def _fallback_opts(self) -> dict:
-        """Настройки без аккаунта — ios/android клиент (360-480p)"""
+        """Последний шанс: ios/android через WARP"""
         return {
-            **self._common_opts(),
+            **self._warp_opts(),
             "extractor_args": {
                 "youtube": {
                     "player_client": ["ios", "android"],
@@ -141,17 +129,14 @@ class YouTubeDownloader:
         }
 
     def _is_auth_error(self, error_msg: str) -> bool:
-        """Проверяет — это ошибка авторизации?"""
         return any(err in error_msg for err in _AUTH_ERRORS)
 
     async def get_info(self, url: str) -> VideoInfo:
-        """Получает метаданные видео + доступные качества с размерами"""
+        """Получает метаданные видео через WARP"""
         import yt_dlp
 
-        # пробуем с cookies (покажет все качества)
-        base = self._auth_opts() if (self.has_cookies() and not self.auth_failed) else self._fallback_opts()
         ydl_opts = {
-            **base,
+            **self._warp_opts(),
             "skip_download": True,
             "ignore_no_formats_error": True,
         }
@@ -161,15 +146,7 @@ class YouTubeDownloader:
             None, self._extract_info, url, ydl_opts
         )
 
-        # парсим доступные качества из форматов
         qualities = self._parse_qualities(info)
-
-        # если Cobalt доступен — показываем все стандартные качества
-        # (Cobalt скачает любое, даже если yt-dlp не видит форматы без cookies)
-        if cobalt_client._available is not False:
-            for q in ["360", "480", "720", "1080", "1440"]:
-                if q not in qualities:
-                    qualities[q] = 0  # размер неизвестен
 
         return VideoInfo(
             title=info.get("title", "Без названия"),
@@ -180,14 +157,11 @@ class YouTubeDownloader:
         )
 
     def _parse_qualities(self, info: dict) -> dict:
-        """Парсит форматы и возвращает доступные качества с примерным размером"""
         formats = info.get("formats", [])
         duration = info.get("duration", 0) or 0
-        # все нужные качества
         target_heights = [360, 480, 720, 1080, 1440]
         result = {}
 
-        # находим лучший аудио-поток (для DASH нужно прибавить его размер)
         audio_size = 0
         for fmt in formats:
             if fmt.get("vcodec", "none") != "none":
@@ -203,7 +177,6 @@ class YouTubeDownloader:
         for h in target_heights:
             best_size = 0
             for fmt in formats:
-                # для Shorts (вертикальных) берём меньшую сторону
                 fmt_h = fmt.get("height") or 0
                 fmt_w = fmt.get("width") or 0
                 short_side = min(fmt_h, fmt_w) if fmt_w else fmt_h
@@ -218,12 +191,10 @@ class YouTubeDownloader:
                     best_size = size
 
             if best_size > 0:
-                # прибавляем аудио-дорожку
                 total = best_size + audio_size
                 total_mb = int(total / 1024 / 1024)
                 result[str(h)] = max(total_mb, 1)
 
-        # если ничего не нашли — даём дефолтные кнопки
         if not result:
             result = {"360": 0, "720": 0}
 
@@ -233,33 +204,35 @@ class YouTubeDownloader:
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает видео: Cobalt → cookies → ios/android"""
+        """Скачивает видео: WARP → cookies → ios/android"""
         self._cleanup_old_files()
+        await self._rate_limit()
 
-        # 1. Cobalt API — основной метод (без cookies)
+        # 1. WARP (основной — без cookies)
         try:
-            result = await self._download_via_cobalt(url, quality, "video")
+            result = await self._download_with_quality(
+                url, quality, progress_callback, opts=self._warp_opts()
+            )
             return self._check_size(result)
         except Exception as e:
-            logger.warning("Cobalt не сработал, fallback на yt-dlp: %s", e)
+            logger.warning("WARP не сработал: %s", e)
 
-        # 2. yt-dlp с cookies
-        await self._rate_limit()
+        # 2. cookies (если есть)
         if self.has_cookies() and not self.auth_failed:
             try:
                 result = await self._download_with_quality(
-                    url, quality, progress_callback, use_auth=True
+                    url, quality, progress_callback, opts=self._cookies_opts()
                 )
                 return self._check_size(result)
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
-                logger.warning("Cookies не сработали, fallback: %s", e)
+                logger.warning("Cookies не сработали: %s", e)
 
-        # 3. yt-dlp ios/android (последний шанс)
+        # 3. ios/android (последний шанс)
         logger.info("Скачиваю через ios/android")
         result = await self._download_with_quality(
-            url, quality, progress_callback, use_auth=False
+            url, quality, progress_callback, opts=self._fallback_opts()
         )
         return self._check_size(result)
 
@@ -267,69 +240,38 @@ class YouTubeDownloader:
         self, url: str,
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает аудио: Cobalt → cookies → ios/android"""
+        """Скачивает аудио: WARP → cookies → ios/android"""
         self._cleanup_old_files()
-
-        # 1. Cobalt API
-        try:
-            return await self._download_via_cobalt(url, "audio", "audio")
-        except Exception as e:
-            logger.warning("Cobalt не сработал (аудио), fallback на yt-dlp: %s", e)
-
-        # 2. yt-dlp с cookies
         await self._rate_limit()
+
+        # 1. WARP
+        try:
+            return await self._do_download_audio(url, progress_callback, opts=self._warp_opts())
+        except Exception as e:
+            logger.warning("WARP не сработал (аудио): %s", e)
+
+        # 2. cookies
         if self.has_cookies() and not self.auth_failed:
             try:
-                return await self._do_download_audio(url, progress_callback, use_auth=True)
+                return await self._do_download_audio(url, progress_callback, opts=self._cookies_opts())
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
-                logger.warning("Cookies не сработали (аудио), fallback: %s", e)
+                logger.warning("Cookies не сработали (аудио): %s", e)
 
-        # 3. yt-dlp ios/android
-        return await self._do_download_audio(url, progress_callback, use_auth=False)
-
-    async def _download_via_cobalt(
-        self, url: str, quality: str, media_type: str,
-    ) -> DownloadResult:
-        """Скачивает через Cobalt API и возвращает DownloadResult"""
-        if media_type == "audio":
-            data = await cobalt_client.download_audio(url)
-        else:
-            data = await cobalt_client.download_video(url, quality)
-
-        # получаем размеры и длительность из файла (ffprobe)
-        loop = asyncio.get_event_loop()
-        info = await loop.run_in_executor(
-            None, cobalt_client.get_media_info, data["file_path"]
-        )
-
-        return DownloadResult(
-            file_path=data["file_path"],
-            media_type=data["media_type"],
-            title="YouTube Media",
-            duration=info.get("duration"),
-            width=info.get("width") or None,
-            height=info.get("height") or None,
-            format_key=data["format_key"],
-        )
+        # 3. ios/android
+        return await self._do_download_audio(url, progress_callback, opts=self._fallback_opts())
 
     async def _do_download_audio(
-        self, url: str, progress_callback: ProgressCallback, use_auth: bool,
+        self, url: str, progress_callback: ProgressCallback, opts: dict,
     ) -> DownloadResult:
-        """Скачивает аудио с выбранными настройками"""
         import yt_dlp
 
-        base = self._auth_opts() if use_auth else self._fallback_opts()
-        output_template = os.path.join(
-            self.download_dir, "%(id)s_audio.%(ext)s"
-        )
-
+        output_template = os.path.join(self.download_dir, "%(id)s_audio.%(ext)s")
         ydl_opts = {
-            **base,
+            **opts,
             "format": "bestaudio[ext=m4a]/bestaudio/best",
             "outtmpl": output_template,
-            # конвертируем в mp3 через ffmpeg
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
@@ -355,7 +297,6 @@ class YouTubeDownloader:
         ))
 
     def _check_size(self, result: DownloadResult) -> DownloadResult:
-        """Проверяет что файл не превышает лимит Telegram"""
         file_size = os.path.getsize(result.file_path)
         if file_size > MAX_FILE_SIZE:
             self._remove_file(result.file_path)
@@ -367,18 +308,12 @@ class YouTubeDownloader:
     async def _download_with_quality(
         self, url: str, quality: str,
         progress_callback: ProgressCallback = None,
-        use_auth: bool = True,
+        opts: dict = None,
     ) -> DownloadResult:
-        """Скачивает видео в указанном качестве"""
         import yt_dlp
 
-        base = self._auth_opts() if use_auth else self._fallback_opts()
-        output_template = os.path.join(
-            self.download_dir, f"%(id)s_{quality}p.%(ext)s"
-        )
-
+        output_template = os.path.join(self.download_dir, f"%(id)s_{quality}p.%(ext)s")
         height = int(quality)
-        # универсальный format_str: сначала h264, потом любой кодек
         format_str = (
             f"bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
             f"/bestvideo[height<={height}]+bestaudio"
@@ -387,7 +322,7 @@ class YouTubeDownloader:
         )
 
         ydl_opts = {
-            **base,
+            **opts,
             "format": format_str,
             "outtmpl": output_template,
             "merge_output_format": "mp4",
@@ -399,7 +334,6 @@ class YouTubeDownloader:
         )
 
         file_path = self._find_downloaded_file(info, "mp4")
-
         if not file_path or not os.path.exists(file_path):
             raise RuntimeError("Не удалось найти скачанный видеофайл")
 
@@ -414,23 +348,19 @@ class YouTubeDownloader:
         )
 
     def _extract_info(self, url: str, opts: dict) -> dict:
-        """Извлекает метаданные (синхронно)"""
         import yt_dlp
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=False)
 
     def _download(self, url: str, opts: dict, progress_callback: ProgressCallback = None) -> dict:
-        """Скачивает видео/аудио (синхронно)"""
         import yt_dlp
 
-        # добавляем хук прогресса если передан callback
         if progress_callback:
             last_update = {"time": 0}
 
             def _hook(d):
                 if d["status"] != "downloading":
                     return
-                # обновляем не чаще раз в 3 секунды
                 now = time.time()
                 if now - last_update["time"] < 3:
                     return
@@ -450,27 +380,19 @@ class YouTubeDownloader:
             return ydl.extract_info(url, download=True)
 
     def _find_downloaded_file(self, info: dict, expected_ext: str) -> str | None:
-        """Ищет скачанный файл в папке загрузок"""
         video_id = info.get("id", "")
-
-        # ищем файл по id видео
         for filename in os.listdir(self.download_dir):
             if video_id in filename and filename.endswith(f".{expected_ext}"):
                 return os.path.join(self.download_dir, filename)
-
-        # если не нашли по id — берём последний файл
         for filename in sorted(os.listdir(self.download_dir), reverse=True):
             if filename.endswith(f".{expected_ext}"):
                 return os.path.join(self.download_dir, filename)
-
         return None
 
     def cleanup(self, result: DownloadResult) -> None:
-        """Удаляет временные файлы после отправки"""
         self._remove_file(result.file_path)
 
     def _remove_file(self, path: str) -> None:
-        """Безопасно удаляет файл"""
         try:
             if os.path.exists(path):
                 os.remove(path)
@@ -480,7 +402,6 @@ class YouTubeDownloader:
 
 
 class FileTooLargeError(Exception):
-    """Файл превышает лимит Telegram"""
     pass
 
 

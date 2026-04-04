@@ -9,10 +9,8 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
-      cobalt:
+      warp:
         condition: service_started
-    environment:
-      - COBALT_API_URL=http://cobalt:9000/
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
@@ -36,30 +34,10 @@ services:
       - bot-api-data:/var/lib/telegram-bot-api
       - /tmp/yt_bot:/tmp/yt_bot
 
-  # Cobalt API — скачивание YouTube без cookies
-  # Трафик проксируется через redsocks (прозрачно, без HTTP_PROXY)
-  cobalt:
-    image: ghcr.io/imputnet/cobalt:11
-    init: true
+  # Cloudflare WARP — бесплатный VPN, YouTube не блокирует IP Cloudflare
+  warp:
+    image: ghcr.io/mon-ius/docker-warp-socks:v5
     restart: unless-stopped
-    ports:
-      - "${COBALT_PORT:-9000}:9000"
-    environment:
-      API_URL: "http://cobalt:9000/"
-    tmpfs:
-      - /tmp:size=2G
-
-  # Прозрачный прокси — весь трафик Cobalt идёт через резидентный IP
-  redsocks:
-    build: ./redsocks
-    restart: unless-stopped
-    network_mode: "service:cobalt"
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    environment:
-      PROXY_IP: ${PROXY_IP}
-      PROXY_PORT: ${PROXY_PORT}
 
   # PostgreSQL
   postgres:
