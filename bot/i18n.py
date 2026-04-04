@@ -142,11 +142,6 @@ TRANSLATIONS = {
         "uz": f"{E['plane']} Deyarli tayyor! Fayl Telegramga yuklanmoqda... Bu bir necha daqiqa vaqt oladi {E['clock']}",
         "en": f"{E['plane']} Almost done! Uploading file to Telegram... This will take a couple of minutes {E['clock']}",
     },
-    "download.in_queue": {
-        "ru": f"{E['clock']} Сервер занят. Твой запрос в очереди, скоро начну...",
-        "uz": f"{E['clock']} Server band. So'roving navbatda, tez orada boshlayman...",
-        "en": f"{E['clock']} Server is busy. Your request is queued, starting soon...",
-    },
     "download.quality_downgraded": {
         "ru": f"{E['warning']} Видео в 720p оказалось больше 50 МБ — скачал в 360p.",
         "uz": f"{E['warning']} 720p video 50 MB dan katta — 360p sifatda yuklandi.",
