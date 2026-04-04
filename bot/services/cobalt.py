@@ -103,6 +103,7 @@ class CobaltClient:
         async with aiohttp.ClientSession(timeout=_API_TIMEOUT) as session:
             async with session.post(self.api_url, json=body, headers=headers) as resp:
                 data = await resp.json()
+                logger.info("Cobalt ответ: status=%s, data=%s", resp.status, data)
 
                 if resp.status != 200:
                     error_msg = data.get("error", {}).get("code", "unknown_error")
@@ -110,6 +111,7 @@ class CobaltClient:
 
                 status = data.get("status")
                 if status in ("tunnel", "redirect"):
+                    logger.info("Cobalt URL: %s", data["url"])
                     return data["url"]
 
                 # picker — несколько вариантов (плейлист), берём первый
@@ -126,15 +128,20 @@ class CobaltClient:
 
         async with aiohttp.ClientSession(timeout=_DOWNLOAD_TIMEOUT) as session:
             async with session.get(url) as resp:
+                logger.info("Tunnel ответ: status=%s, content-type=%s, content-length=%s",
+                            resp.status, resp.content_type, resp.headers.get("content-length", "?"))
+
                 if resp.status != 200:
-                    raise CobaltError(f"Не удалось скачать файл: HTTP {resp.status}")
+                    body = await resp.text()
+                    raise CobaltError(f"Не удалось скачать файл: HTTP {resp.status}, body={body[:200]}")
 
                 with open(file_path, "wb") as f:
                     async for chunk in resp.content.iter_chunked(1024 * 1024):
                         f.write(chunk)
 
-        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-            raise CobaltError("Скачанный файл пуст")
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        if file_size == 0:
+            raise CobaltError("Скачанный файл пуст (0 байт)")
 
         logger.info("Cobalt: скачан %s (%.1f МБ)",
                      filename, os.path.getsize(file_path) / 1024 / 1024)
