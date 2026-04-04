@@ -42,12 +42,12 @@ _admin_notified = False
 
 def _make_progress_bar(percent: int, dl_mb: float, total_mb: float) -> str:
     """Рисует полоску прогресса"""
-    filled = int(percent / 100 * 15)
-    bar = "█" * filled + "░" * (15 - filled)
+    filled = int(percent / 100 * 12)
+    bar = "▰" * filled + "▱" * (12 - filled)
     return (
-        f"{E['clock']} Скачиваю... {percent}%\n"
-        f"{bar}\n"
-        f"{dl_mb:.0f} МБ / {total_mb:.0f} МБ"
+        f"{E['clock']} Скачиваю...\n"
+        f"{bar} {percent}%\n"
+        f"{dl_mb:.0f} МБ из {total_mb:.0f} МБ"
     )
 
 
