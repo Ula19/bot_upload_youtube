@@ -70,10 +70,13 @@ class YouTubeDownloader:
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
+        self._proxy = settings.proxy_url or None
         self._last_download_time = 0.0
         self.auth_failed = False
 
         logger.info("WARP прокси: %s", WARP_PROXY)
+        if self._proxy:
+            logger.info("Резидентный прокси (fallback): %s", self._proxy)
 
         if self.has_cookies():
             logger.info("Cookies: найдены (fallback)")
@@ -128,11 +131,37 @@ class YouTubeDownloader:
             },
         }
 
+    def _proxy_cookies_opts(self) -> dict:
+        """Резидентный прокси + cookies (если WARP упал)"""
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+        }
+        if self._proxy:
+            opts["proxy"] = self._proxy
+        opts["cookiefile"] = self._COOKIES_PATH
+        return opts
+
+    def _proxy_fallback_opts(self) -> dict:
+        """Резидентный прокси + ios/android (если всё упало)"""
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+        }
+        if self._proxy:
+            opts["proxy"] = self._proxy
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["ios", "android"],
+            },
+        }
+        return opts
+
     def _is_auth_error(self, error_msg: str) -> bool:
         return any(err in error_msg for err in _AUTH_ERRORS)
 
     async def get_info(self, url: str) -> VideoInfo:
-        """Получает метаданные видео через WARP"""
+        """Получает метаданные видео: WARP → прокси"""
         import yt_dlp
 
         ydl_opts = {
@@ -142,9 +171,24 @@ class YouTubeDownloader:
         }
 
         loop = asyncio.get_event_loop()
-        info = await loop.run_in_executor(
-            None, self._extract_info, url, ydl_opts
-        )
+        try:
+            info = await loop.run_in_executor(
+                None, self._extract_info, url, ydl_opts
+            )
+        except Exception as e:
+            # WARP упал — пробуем через прокси
+            if self._proxy:
+                logger.warning("WARP не дал инфо, пробую прокси: %s", e)
+                fallback_opts = {
+                    **self._proxy_fallback_opts(),
+                    "skip_download": True,
+                    "ignore_no_formats_error": True,
+                }
+                info = await loop.run_in_executor(
+                    None, self._extract_info, url, fallback_opts
+                )
+            else:
+                raise
 
         qualities = self._parse_qualities(info)
 
@@ -204,7 +248,7 @@ class YouTubeDownloader:
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает видео: WARP → cookies → ios/android"""
+        """Скачивает видео: WARP → прокси+cookies → прокси+ios"""
         self._cleanup_old_files()
         await self._rate_limit()
 
@@ -217,30 +261,34 @@ class YouTubeDownloader:
         except Exception as e:
             logger.warning("WARP не сработал: %s", e)
 
-        # 2. cookies (если есть)
-        if self.has_cookies() and not self.auth_failed:
+        # 2. резидентный прокси + cookies (если WARP упал)
+        if self.has_cookies() and not self.auth_failed and self._proxy:
             try:
+                logger.info("Fallback: резидентный прокси + cookies")
                 result = await self._download_with_quality(
-                    url, quality, progress_callback, opts=self._cookies_opts()
+                    url, quality, progress_callback, opts=self._proxy_cookies_opts()
                 )
                 return self._check_size(result)
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
-                logger.warning("Cookies не сработали: %s", e)
+                logger.warning("Прокси+cookies не сработали: %s", e)
 
-        # 3. ios/android (последний шанс)
-        logger.info("Скачиваю через ios/android")
-        result = await self._download_with_quality(
-            url, quality, progress_callback, opts=self._fallback_opts()
-        )
-        return self._check_size(result)
+        # 3. резидентный прокси + ios/android (последний шанс)
+        if self._proxy:
+            logger.info("Fallback: резидентный прокси + ios/android")
+            result = await self._download_with_quality(
+                url, quality, progress_callback, opts=self._proxy_fallback_opts()
+            )
+            return self._check_size(result)
+
+        raise RuntimeError("Не удалось скачать видео: WARP недоступен, прокси не настроен")
 
     async def download_audio(
         self, url: str,
         progress_callback: ProgressCallback = None,
     ) -> DownloadResult:
-        """Скачивает аудио: WARP → cookies → ios/android"""
+        """Скачивает аудио: WARP → прокси+cookies → прокси+ios"""
         self._cleanup_old_files()
         await self._rate_limit()
 
@@ -250,17 +298,22 @@ class YouTubeDownloader:
         except Exception as e:
             logger.warning("WARP не сработал (аудио): %s", e)
 
-        # 2. cookies
-        if self.has_cookies() and not self.auth_failed:
+        # 2. резидентный прокси + cookies
+        if self.has_cookies() and not self.auth_failed and self._proxy:
             try:
-                return await self._do_download_audio(url, progress_callback, opts=self._cookies_opts())
+                logger.info("Fallback: прокси + cookies (аудио)")
+                return await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
-                logger.warning("Cookies не сработали (аудио): %s", e)
+                logger.warning("Прокси+cookies не сработали (аудио): %s", e)
 
-        # 3. ios/android
-        return await self._do_download_audio(url, progress_callback, opts=self._fallback_opts())
+        # 3. резидентный прокси + ios/android
+        if self._proxy:
+            logger.info("Fallback: прокси + ios/android (аудио)")
+            return await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
+
+        raise RuntimeError("Не удалось скачать аудио: WARP недоступен, прокси не настроен")
 
     async def _do_download_audio(
         self, url: str, progress_callback: ProgressCallback, opts: dict,
