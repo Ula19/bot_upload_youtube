@@ -111,6 +111,9 @@ class YouTubeDownloader:
             "quiet": True,
             "no_warnings": True,
             "proxy": WARP_PROXY,
+            # увеличенные таймауты для WARP (SSL может тормозить)
+            "socket_timeout": 30,
+            "retries": 3,
         }
 
     def _cookies_opts(self) -> dict:

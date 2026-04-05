@@ -10,7 +10,7 @@ services:
       bot-api:
         condition: service_started
       warp:
-        condition: service_started
+        condition: service_healthy
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
@@ -38,6 +38,12 @@ services:
   warp:
     image: ghcr.io/mon-ius/docker-warp-socks:v5
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -x socks5://127.0.0.1:9091 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q warp=on"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   # PostgreSQL
   postgres:
