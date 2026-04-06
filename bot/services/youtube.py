@@ -418,18 +418,18 @@ class YouTubeDownloader:
     async def _do_download_audio(
         self, url: str, progress_callback: ProgressCallback, opts: dict,
     ) -> DownloadResult:
+        """Скачивает аудио в нативном формате (m4a) без перекодирования.
+        m4a — нативный формат YouTube (AAC), Telegram играет его как аудио.
+        Без FFmpeg postprocessor — экономит до 4 минут CPU на длинных видео.
+        """
         import yt_dlp
 
         output_template = os.path.join(self.download_dir, "%(id)s_audio.%(ext)s")
         ydl_opts = {
             **opts,
-            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            # m4a приоритет; webm/opus как fallback если m4a недоступен
+            "format": "bestaudio[ext=m4a]/bestaudio",
             "outtmpl": output_template,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "128",
-            }],
         }
 
         loop = asyncio.get_event_loop()
@@ -437,7 +437,9 @@ class YouTubeDownloader:
             None, self._download, url, ydl_opts, progress_callback
         )
 
-        file_path = self._find_downloaded_file(info, "mp3")
+        # реальное расширение определяет yt-dlp (обычно m4a, иногда webm)
+        actual_ext = info.get("ext", "m4a")
+        file_path = self._find_downloaded_file(info, actual_ext)
         if not file_path or not os.path.exists(file_path):
             raise RuntimeError("Не удалось найти скачанный аудиофайл")
 
