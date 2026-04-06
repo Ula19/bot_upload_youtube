@@ -83,6 +83,14 @@ async def handle_youtube_link(message: Message, state: FSMContext) -> None:
         status_msg = await message.answer(t("download.fetching_info", lang))
         info = await downloader.get_info(clean_url)
 
+        # прямой эфир — скачивание не поддерживается
+        if info.is_live:
+            await status_msg.edit_text(
+                t("error.live_stream", lang),
+                parse_mode="HTML",
+            )
+            return
+
         # сохраняем URL и инфо в FSM
         await state.set_state(DownloadStates.waiting_format)
         await state.update_data(

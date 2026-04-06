@@ -292,6 +292,11 @@ TRANSLATIONS = {
     },
 
     # === Ошибки ===
+    "error.live_stream": {
+        "ru": f"{E['warning']} <b>Прямой эфир</b>\n\nСкачивание прямых трансляций не поддерживается.",
+        "uz": f"{E['warning']} <b>Jonli efir</b>\n\nJonli efirlarni yuklab olish qo'llab-quvvatlanmaydi.",
+        "en": f"{E['warning']} <b>Live stream</b>\n\nDownloading live streams is not supported.",
+    },
     "error.private": {
         "ru": f"{E['lock']} <b>Видео приватное</b>\n\nСкачивание приватных видео невозможно.",
         "uz": f"{E['lock']} <b>Video yopiq</b>\n\nYopiq videolarni yuklab olish mumkin emas.",

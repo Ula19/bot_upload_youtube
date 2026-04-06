@@ -31,6 +31,7 @@ class VideoInfo:
     uploader: str | None = None
     # доступные качества: {"360": 30, "720": 100} (качество → примерный размер в МБ)
     qualities: dict | None = None
+    is_live: bool = False
 
 
 @dataclass
@@ -201,6 +202,7 @@ class YouTubeDownloader:
             thumbnail=info.get("thumbnail"),
             uploader=info.get("uploader"),
             qualities=qualities,
+            is_live=bool(info.get("is_live")),
         )
 
     def _parse_qualities(self, info: dict) -> dict:
