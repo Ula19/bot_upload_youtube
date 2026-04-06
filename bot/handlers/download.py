@@ -314,6 +314,12 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
         except Exception:
             pass
 
+    t_upload = time.monotonic()
+    try:
+        size_mb = os.path.getsize(result.file_path) / 1024 / 1024
+    except OSError:
+        size_mb = 0
+
     if result.media_type == "video":
         promo = t("download.promo", lang, bot_username=settings.bot_username)
         sent = await message.answer_video(
@@ -323,6 +329,7 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             width=result.width,
             height=result.height,
         )
+        _log_upload_metric("video", t_upload, size_mb)
         return sent.video.file_id
 
     elif result.media_type == "audio":
@@ -333,9 +340,19 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             duration=int(result.duration) if result.duration else None,
             title=result.title,
         )
+        _log_upload_metric("audio", t_upload, size_mb)
         return sent.audio.file_id
 
     return None
+
+
+def _log_upload_metric(media_type: str, t_start: float, size_mb: float) -> None:
+    elapsed = time.monotonic() - t_start
+    speed = size_mb / elapsed if elapsed > 0 else 0
+    logger.info(
+        "[METRIC] upload_%s %.2fs size=%.1fMB speed=%.1fMB/s",
+        media_type, elapsed, size_mb, speed,
+    )
 
 
 async def _send_cached(
