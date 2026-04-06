@@ -68,9 +68,9 @@ TRANSLATIONS = {
         "en": "Video (MP4)",
     },
     "btn.format_audio": {
-        "ru": "Аудио (MP3)",
-        "uz": "Audio (MP3)",
-        "en": "Audio (MP3)",
+        "ru": "Аудио",
+        "uz": "Audio",
+        "en": "Audio",
     },
     "btn.download_audio_instead": {
         "ru": "Скачать аудио вместо видео",
@@ -193,7 +193,7 @@ TRANSLATIONS = {
             f"{E['book']} <b>Помощь</b>\n\n"
             f"{E['star']} Отправь ссылку на YouTube видео — получишь файл\n"
             f"{E['star']} Поддерживаются: видео, Shorts\n"
-            f"{E['star']} Можно скачать как видео (MP4) или аудио (MP3)\n"
+            f"{E['star']} Можно скачать как видео или аудио\n"
             f"{E['lock']} Приватные видео не поддерживаются\n\n"
             f"{E['plane']} По вопросам: @{{admin_username}}"
         ),
@@ -201,7 +201,7 @@ TRANSLATIONS = {
             f"{E['book']} <b>Yordam</b>\n\n"
             f"{E['star']} YouTube video havolasini yuboring — faylni olasiz\n"
             f"{E['star']} Qo'llab-quvvatlanadi: videolar, Shorts\n"
-            f"{E['star']} Video (MP4) yoki audio (MP3) sifatida yuklab olish mumkin\n"
+            f"{E['star']} Video yoki audio sifatida yuklab olish mumkin\n"
             f"{E['lock']} Yopiq videolar qo'llab-quvvatlanmaydi\n\n"
             f"{E['plane']} Savollar uchun: @{{admin_username}}"
         ),
@@ -209,7 +209,7 @@ TRANSLATIONS = {
             f"{E['book']} <b>Help</b>\n\n"
             f"{E['star']} Send a YouTube video link — get the file\n"
             f"{E['star']} Supported: videos, Shorts\n"
-            f"{E['star']} Download as video (MP4) or audio (MP3)\n"
+            f"{E['star']} Download as video or audio\n"
             f"{E['lock']} Private videos are not supported\n\n"
             f"{E['plane']} Contact: @{{admin_username}}"
         ),

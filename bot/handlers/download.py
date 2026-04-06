@@ -39,6 +39,10 @@ PROGRESS_UPDATE_INTERVAL = 4
 # чтобы не спамить админа — уведомляем только один раз
 _admin_notified = False
 
+# троттлинг алертов о fallback (одно сообщение раз в N секунд)
+_FALLBACK_ALERT_THROTTLE = 600  # 10 минут
+_last_fallback_alert: dict[str, float] = {}
+
 # максимум 30 одновременных скачиваний — сервер мощный (8ГБ ОЗУ, 6.4ГБ свободно)
 _download_semaphore = asyncio.Semaphore(30)
 
@@ -142,7 +146,7 @@ async def choose_video_format(callback: CallbackQuery, state: FSMContext) -> Non
 
 @router.callback_query(F.data == "fmt_audio")
 async def download_audio(callback: CallbackQuery, state: FSMContext) -> None:
-    """Юзер выбрал аудио — скачиваем MP3"""
+    """Юзер выбрал аудио — скачиваем m4a"""
     data = await state.get_data()
     url = data.get("url")
     await state.clear()
@@ -409,6 +413,59 @@ def _get_error_text(error: str, lang: str = "ru") -> str:
         return t("error.age_restricted", lang)
     else:
         return t("error.generic", lang)
+
+
+# bot instance — устанавливается из main.py через setup_fallback_alerts
+_bot_ref = None
+
+
+def setup_fallback_alerts(bot) -> None:
+    """Подключает callback алертов админу к downloader.
+    Вызывается из main.py после создания бота.
+    """
+    global _bot_ref
+    _bot_ref = bot
+    downloader.on_source_failed = _on_source_failed
+    logger.info("Алерты о падении источников подключены")
+
+
+def _on_source_failed(source: str, error: str) -> None:
+    """Sync callback, вызывается из download_video/audio когда источник упал.
+    Шедулит асинхронную отправку алерта в event loop.
+    """
+    if _bot_ref is None:
+        return
+    try:
+        asyncio.create_task(_send_fallback_alert(source, error))
+    except RuntimeError:
+        # нет активного event loop — игнорируем
+        pass
+
+
+async def _send_fallback_alert(source: str, error: str) -> None:
+    """Отправляет алерт админу о падении источника. С троттлингом."""
+    now = time.time()
+    last = _last_fallback_alert.get(source, 0)
+    if now - last < _FALLBACK_ALERT_THROTTLE:
+        return
+    _last_fallback_alert[source] = now
+
+    # обрезаем длинный traceback
+    short_error = error[:300] + "..." if len(error) > 300 else error
+
+    text = (
+        f"{E['warning']} <b>Источник упал!</b>\n\n"
+        f"<b>Источник:</b> {source}\n"
+        f"<b>Ошибка:</b> <code>{short_error}</code>\n\n"
+        f"Проверь логи и состояние прокси/WARP."
+    )
+
+    for admin_id in settings.admin_id_list:
+        try:
+            await _bot_ref.send_message(admin_id, text, parse_mode="HTML")
+            logger.info("Админ %s уведомлён о падении %s", admin_id, source)
+        except Exception as e:
+            logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
 
 
 async def _notify_admin_auth_failed(bot) -> None:

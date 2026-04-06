@@ -60,6 +60,9 @@ async def main() -> None:
     dp.include_router(cookies.router)
     dp.include_router(download.router)  # последний — ловит все текстовые сообщения
 
+    # подключаем алерты админу о падении источников (proxy/WARP)
+    download.setup_fallback_alerts(bot)
+
     # подключаем мидлвари
     from bot.middlewares.rate_limit import RateLimitMiddleware
     from bot.middlewares.subscription import SubscriptionMiddleware

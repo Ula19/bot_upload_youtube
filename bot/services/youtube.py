@@ -76,6 +76,10 @@ class YouTubeDownloader:
         self.auth_failed = False
         # SOCKS5 резидентный прокси → primary, WARP → fallback
         self._proxy_first = bool(self._proxy and self._proxy.startswith("socks5://"))
+        # callback для уведомления админа когда источник упал
+        # сигнатура: (source: str, error: str) -> None
+        # устанавливается извне (в main.py) после создания экземпляра
+        self.on_source_failed: Callable[[str, str], None] | None = None
 
         if self._proxy_first:
             logger.info("Резидентный SOCKS5 прокси (PRIMARY): %s", self._proxy)
@@ -92,6 +96,15 @@ class YouTubeDownloader:
 
     def has_cookies(self) -> bool:
         return os.path.isfile(self._COOKIES_PATH)
+
+    def _fire_source_failed(self, source: str, error: Exception) -> None:
+        """Триггер callback'а о падении источника. Не пробрасывает ошибки."""
+        if self.on_source_failed is None:
+            return
+        try:
+            self.on_source_failed(source, str(error))
+        except Exception as e:
+            logger.warning("on_source_failed callback упал: %s", e)
 
     async def _rate_limit(self):
         now = time.time()
@@ -310,6 +323,7 @@ class YouTubeDownloader:
             return checked
         except Exception as e:
             logger.warning("%s не сработал: %s", primary_name, e)
+            self._fire_source_failed(primary_name, e)
 
         # 2. FALLBACK к WARP (если primary был proxy)
         if self._proxy_first:
@@ -323,6 +337,7 @@ class YouTubeDownloader:
                 return checked
             except Exception as e:
                 logger.warning("WARP не сработал: %s", e)
+                self._fire_source_failed("warp", e)
 
         # 3. резидентный прокси + cookies
         if self.has_cookies() and not self.auth_failed and self._proxy:
@@ -338,18 +353,23 @@ class YouTubeDownloader:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
                 logger.warning("Прокси+cookies не сработали: %s", e)
+                self._fire_source_failed("proxy+cookies", e)
 
         # 4. резидентный прокси + ios/android (последний шанс)
         if self._proxy:
-            logger.info("Fallback: резидентный прокси + ios/android")
-            result = await self._download_with_quality(
-                url, quality, progress_callback, opts=self._proxy_fallback_opts()
-            )
-            checked = self._check_size(result)
-            self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path)
-            return checked
+            try:
+                logger.info("Fallback: резидентный прокси + ios/android")
+                result = await self._download_with_quality(
+                    url, quality, progress_callback, opts=self._proxy_fallback_opts()
+                )
+                checked = self._check_size(result)
+                self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path)
+                return checked
+            except Exception as e:
+                logger.warning("Прокси+ios не сработали: %s", e)
+                self._fire_source_failed("proxy+ios", e)
 
-        raise RuntimeError("Не удалось скачать видео: все источники недоступны")
+        raise RuntimeError("download_failed")
 
     def _log_download_metric(
         self, op: str, t_start: float, source: str, quality: str, file_path: str
@@ -379,41 +399,48 @@ class YouTubeDownloader:
         primary_name = "proxy" if self._proxy_first else "warp"
         try:
             result = await self._do_download_audio(url, progress_callback, opts=primary_opts)
-            self._log_download_metric("download_audio", t_start, primary_name, "mp3", result.file_path)
+            self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path)
             return result
         except Exception as e:
             logger.warning("%s не сработал (аудио): %s", primary_name, e)
+            self._fire_source_failed(primary_name, e)
 
         # 2. FALLBACK к WARP (если primary был proxy)
         if self._proxy_first:
             try:
                 logger.info("Fallback: WARP (аудио)")
                 result = await self._do_download_audio(url, progress_callback, opts=self._warp_opts())
-                self._log_download_metric("download_audio", t_start, "warp", "mp3", result.file_path)
+                self._log_download_metric("download_audio", t_start, "warp", "m4a", result.file_path)
                 return result
             except Exception as e:
                 logger.warning("WARP не сработал (аудио): %s", e)
+                self._fire_source_failed("warp", e)
 
         # 3. резидентный прокси + cookies
         if self.has_cookies() and not self.auth_failed and self._proxy:
             try:
                 logger.info("Fallback: прокси + cookies (аудио)")
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
-                self._log_download_metric("download_audio", t_start, "proxy+cookies", "mp3", result.file_path)
+                self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path)
                 return result
             except Exception as e:
                 if self._is_auth_error(str(e)):
                     self.auth_failed = True
                 logger.warning("Прокси+cookies не сработали (аудио): %s", e)
+                self._fire_source_failed("proxy+cookies", e)
 
         # 4. резидентный прокси + ios/android
         if self._proxy:
-            logger.info("Fallback: прокси + ios/android (аудио)")
-            result = await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
-            self._log_download_metric("download_audio", t_start, "proxy+ios", "mp3", result.file_path)
-            return result
+            try:
+                logger.info("Fallback: прокси + ios/android (аудио)")
+                result = await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
+                self._log_download_metric("download_audio", t_start, "proxy+ios", "m4a", result.file_path)
+                return result
+            except Exception as e:
+                logger.warning("Прокси+ios не сработали (аудио): %s", e)
+                self._fire_source_failed("proxy+ios", e)
 
-        raise RuntimeError("Не удалось скачать аудио: все источники недоступны")
+        raise RuntimeError("download_failed")
 
     async def _do_download_audio(
         self, url: str, progress_callback: ProgressCallback, opts: dict,
