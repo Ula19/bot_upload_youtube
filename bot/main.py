@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 
 # uvloop ускоряет asyncio в 2-4 раза (не работает на Windows!)
 try:
@@ -72,6 +73,30 @@ async def main() -> None:
     dp.callback_query.middleware(SubscriptionMiddleware())
 
     # события старта и остановки
+    async def _background_cleanup() -> None:
+        """Фоновая задача: очистка памяти и /tmp каждые 5 минут"""
+        import glob
+        from bot.middlewares.rate_limit import cleanup_stale_entries
+        while True:
+            await asyncio.sleep(300)  # 5 минут
+            # чистим протухшие записи rate limit (memory leak)
+            removed = cleanup_stale_entries()
+            if removed:
+                logger.info("Фоновая очистка: удалено %d записей rate limit", removed)
+            # чистим старые файлы /tmp/yt_bot (старше 30 минут)
+            now = time.time()
+            cutoff = now - 30 * 60
+            cleaned = 0
+            for f in glob.glob("/tmp/yt_bot/**/*", recursive=True):
+                try:
+                    if os.path.isfile(f) and os.path.getmtime(f) < cutoff:
+                        os.remove(f)
+                        cleaned += 1
+                except OSError:
+                    pass
+            if cleaned:
+                logger.info("Фоновая очистка: удалено %d временных файлов из /tmp/yt_bot", cleaned)
+
     @dp.startup()
     async def on_startup() -> None:
         # создаём таблицы в БД
@@ -89,6 +114,10 @@ async def main() -> None:
         # ставим crash-flag (уберём при нормальном завершении)
         with open(CRASH_FLAG, "w") as f:
             f.write("running")
+
+        # запускаем фоновую очистку
+        asyncio.create_task(_background_cleanup())
+        logger.info("Фоновая очистка запущена (интервал 5 мин)")
 
         bot_info = await bot.get_me()
         logger.info(f"Бот @{bot_info.username} запущен!")

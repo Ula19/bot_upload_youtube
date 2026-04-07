@@ -66,13 +66,11 @@ class YouTubeDownloader:
     Fallback — cookies или ios/android.
     """
 
-    _RATE_LIMIT_DELAY = 3
     _COOKIES_PATH = "/app/cookies/cookies.txt"
 
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
-        self._last_download_time = 0.0
         self.auth_failed = False
         # SOCKS5 резидентный прокси → primary, WARP → fallback
         self._proxy_first = bool(self._proxy and self._proxy.startswith("socks5://"))
@@ -105,13 +103,6 @@ class YouTubeDownloader:
             self.on_source_failed(source, str(error))
         except Exception as e:
             logger.warning("on_source_failed callback упал: %s", e)
-
-    async def _rate_limit(self):
-        now = time.time()
-        wait = self._RATE_LIMIT_DELAY - (now - self._last_download_time)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_download_time = time.time()
 
     def _cleanup_old_files(self, max_age_minutes: int = 30) -> None:
         now = time.time()
@@ -308,7 +299,6 @@ class YouTubeDownloader:
           - WARP: warp → proxy+cookies → proxy+ios
         """
         self._cleanup_old_files()
-        await self._rate_limit()
         t_start = time.monotonic()
 
         # 1. PRIMARY
@@ -391,7 +381,6 @@ class YouTubeDownloader:
     ) -> DownloadResult:
         """Скачивает аудио. Порядок попыток зависит от _proxy_first."""
         self._cleanup_old_files()
-        await self._rate_limit()
         t_start = time.monotonic()
 
         # 1. PRIMARY

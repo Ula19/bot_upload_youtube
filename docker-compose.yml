@@ -45,6 +45,15 @@ services:
       retries: 3
       start_period: 15s
 
+  # Автоперезапуск unhealthy контейнеров (особенно WARP)
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   # PostgreSQL
   postgres:
     image: postgres:16-alpine

@@ -37,10 +37,10 @@
 ## Краткосрочные задачи (до 1000 запросов/день)
 
 - [x] ~~Узнать concurrency лимит резидентного прокси у провайдера~~ → 100 threads
-- [ ] Снять/уменьшить `_RATE_LIMIT_DELAY` или сделать per-user
-- [ ] Починить memory leak в `bot/middlewares/rate_limit.py` (`_user_requests` растёт бесконечно)
-- [ ] Фоновая очистка `/tmp/yt_bot` (раз в 5 минут вместо on-demand)
-- [ ] Добавить `willfarrell/autoheal` в docker-compose для автоперезапуска unhealthy WARP
+- [x] ~~Снять/уменьшить `_RATE_LIMIT_DELAY` или сделать per-user~~ → убран полностью (семафор + per-user middleware достаточно)
+- [x] ~~Починить memory leak в `bot/middlewares/rate_limit.py`~~ → фоновая задача очищает протухшие записи каждые 5 минут
+- [x] ~~Фоновая очистка `/tmp/yt_bot`~~ → та же фоновая задача, каждые 5 минут, файлы старше 30 минут
+- [x] ~~Добавить `willfarrell/autoheal` в docker-compose~~ → добавлен, перезапускает unhealthy WARP автоматически
 
 ## Среднесрочные задачи (до 5000 запросов/день)
 

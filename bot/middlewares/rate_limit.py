@@ -21,6 +21,23 @@ WINDOW_SECONDS = 60
 _user_requests: dict[int, list[float]] = {}
 
 
+def cleanup_stale_entries() -> int:
+    """Удаляет протухшие записи из _user_requests.
+    Вызывается фоновой задачей раз в несколько минут.
+    Возвращает количество удалённых записей.
+    """
+    now = time.time()
+    stale_users = [
+        uid for uid, timestamps in _user_requests.items()
+        if not any(now - ts < WINDOW_SECONDS for ts in timestamps)
+    ]
+    for uid in stale_users:
+        del _user_requests[uid]
+    if stale_users:
+        logger.debug("Rate limit: удалено %d устаревших записей", len(stale_users))
+    return len(stale_users)
+
+
 class RateLimitMiddleware(BaseMiddleware):
     """Ограничивает частоту скачиваний — только для текстовых сообщений"""
 
