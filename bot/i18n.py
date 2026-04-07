@@ -323,24 +323,38 @@ TRANSLATIONS = {
         "en": f"{E['cross']} <b>Video is geo-blocked</b>\n\nThe uploader has restricted this video by region.",
     },
     "error.too_large": {
-        "ru": f"{E['package']} <b>Файл слишком большой</b>\n\nTelegram ограничивает размер файла до 50 МБ.",
-        "uz": f"{E['package']} <b>Fayl juda katta</b>\n\nTelegram fayl hajmini 50 MB bilan cheklaydi.",
-        "en": f"{E['package']} <b>File too large</b>\n\nTelegram limits file size to 50 MB.",
+        "ru": f"{E['package']} <b>Файл слишком большой</b>\n\nTelegram ограничивает размер файла до 2 ГБ.",
+        "uz": f"{E['package']} <b>Fayl juda katta</b>\n\nTelegram fayl hajmini 2 GB bilan cheklaydi.",
+        "en": f"{E['package']} <b>File too large</b>\n\nTelegram limits file size to 2 GB.",
+    },
+    "error.too_large_try_lower": {
+        "ru": (
+            f"{E['package']} <b>Видео слишком большое</b>\n\n"
+            "Файл превысил лимит 2 ГБ. Попробуй качество пониже:"
+        ),
+        "uz": (
+            f"{E['package']} <b>Video juda katta</b>\n\n"
+            "Fayl 2 GB dan oshdi. Pastroq sifatni tanlang:"
+        ),
+        "en": (
+            f"{E['package']} <b>Video too large</b>\n\n"
+            "File exceeded 2 GB limit. Try a lower quality:"
+        ),
     },
     "error.too_large_suggest_audio": {
         "ru": (
             f"{E['package']} <b>Видео слишком большое</b>\n\n"
-            "Даже в 360p файл превышает 50 МБ.\n"
+            "Файл превышает лимит 2 ГБ даже в минимальном качестве.\n"
             "Попробуй скачать аудио:"
         ),
         "uz": (
             f"{E['package']} <b>Video juda katta</b>\n\n"
-            "360p sifatda ham fayl 50 MB dan oshadi.\n"
+            "Fayl minimal sifatda ham 2 GB dan oshadi.\n"
             "Audio yuklab ko'ring:"
         ),
         "en": (
             f"{E['package']} <b>Video too large</b>\n\n"
-            "Even at 360p the file exceeds 50 MB.\n"
+            "File exceeds 2 GB even at minimum quality.\n"
             "Try downloading audio:"
         ),
     },

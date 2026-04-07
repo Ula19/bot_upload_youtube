@@ -218,6 +218,7 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
     await _process_download(
         callback.message, url, format_key, callback.from_user, lang, state,
         expected_size_mb=expected_size_mb,
+        qualities=qualities,
     )
 
 
@@ -229,10 +230,12 @@ async def _process_download(
     lang: str = "ru",
     state: FSMContext | None = None,
     expected_size_mb: int = 0,
+    qualities: dict | None = None,
 ) -> None:
     """Скачивает и отправляет медиа.
     expected_size_mb используется для балансировки прокси/WARP:
     маленькие видео идут через WARP, большие — через прокси.
+    qualities нужны чтобы при FileTooLargeError предложить меньшее качество.
     """
     # проверяем кэш
     async with async_session() as session:
@@ -316,16 +319,39 @@ async def _process_download(
                 pass
 
         except FileTooLargeError:
-            # видео слишком большое даже в 360p — предлагаем аудио
-            await status_msg.edit_text(
-                t("error.too_large_suggest_audio", lang),
-                reply_markup=get_audio_suggest_keyboard(lang),
-                parse_mode="HTML",
-            )
-            # восстанавливаем FSM с URL чтобы кнопка "Скачать аудио" работала
-            if state:
-                await state.set_state(DownloadStates.waiting_format)
-                await state.update_data(url=url)
+            # файл превысил 2 ГБ — предлагаем качества пониже, если они есть
+            current_quality = format_key.replace("video_", "") if format_key.startswith("video_") else None
+            lower_qualities = {}
+            if current_quality and qualities:
+                try:
+                    current_h = int(current_quality)
+                    lower_qualities = {
+                        q: size for q, size in qualities.items()
+                        if int(q) < current_h
+                    }
+                except ValueError:
+                    pass
+
+            if lower_qualities:
+                # есть качества пониже — показываем их
+                await status_msg.edit_text(
+                    t("error.too_large_try_lower", lang),
+                    reply_markup=get_quality_keyboard(lang, lower_qualities),
+                    parse_mode="HTML",
+                )
+                if state:
+                    await state.set_state(DownloadStates.waiting_quality)
+                    await state.update_data(url=url, qualities=lower_qualities)
+            else:
+                # качеств пониже нет — предлагаем аудио
+                await status_msg.edit_text(
+                    t("error.too_large_suggest_audio", lang),
+                    reply_markup=get_audio_suggest_keyboard(lang),
+                    parse_mode="HTML",
+                )
+                if state:
+                    await state.set_state(DownloadStates.waiting_format)
+                    await state.update_data(url=url)
 
         except Exception as e:
             logger.error(f"Ошибка скачивания {url}: {e}")

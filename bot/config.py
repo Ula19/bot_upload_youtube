@@ -38,8 +38,8 @@ class Settings(BaseSettings):
     small_video_threshold_mb: int = 30
 
     # префлайт-фильтр: качества с оценкой > этого порога не показываются юзеру
-    # (оценка yt-dlp обычно завышена, поэтому 2300 даёт запас ~15% от реального 2 ГБ лимита)
-    max_quality_size_mb: int = 2300
+    # (оценка yt-dlp обычно завышена; 2000 — с запасом от лимита 2 ГБ и разгружает сервер от тяжёлых загрузок)
+    max_quality_size_mb: int = 2000
 
     @property
     def admin_id_list(self) -> list[int]:
