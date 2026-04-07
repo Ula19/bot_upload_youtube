@@ -45,9 +45,11 @@ _ERROR_CATEGORY_LABELS = {
     "cookies_expired": "Cookies протухли — обнови через /update_cookies",
     "ip_blocked": "YouTube заблокировал IP — нужна ротация прокси",
     "network": "Сетевая ошибка (таймаут/нет связи)",
-    "unavailable": "Видео недоступно (гео-блок/приват)",
     "unknown": "Неизвестная ошибка",
 }
+
+# категории которые не алертим админу — это ошибки на стороне юзера/контента, не инфраструктуры
+_SILENT_CATEGORIES = {"unavailable"}
 
 # максимум 30 одновременных скачиваний — сервер мощный (8ГБ ОЗУ, 6.4ГБ свободно)
 _download_semaphore = asyncio.Semaphore(30)
@@ -449,6 +451,9 @@ async def _send_fallback_alert(source: str, error: str) -> None:
     now = time.time()
     # ключ троттлинга — (источник, категория), чтобы разные типы ошибок не глушили друг друга
     category = classify_error(error)
+    # не алертим для ошибок на стороне юзера/контента (приват, гео-блок и т.п.)
+    if category in _SILENT_CATEGORIES:
+        return
     throttle_key = f"{source}:{category}"
     last = _last_fallback_alert.get(throttle_key, 0)
     if now - last < _FALLBACK_ALERT_THROTTLE:
