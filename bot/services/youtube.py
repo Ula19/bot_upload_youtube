@@ -231,6 +231,8 @@ class YouTubeDownloader:
             # ошибка на стороне контента — fallback'и не помогут
             if classify_error(str(e)) == "unavailable":
                 raise
+            # инфраструктурный сбой primary — алертим админа
+            self._fire_source_failed(primary_source, e)
             if fallback_opts:
                 logger.warning("%s не дал инфо, пробую %s: %s", primary_source, fallback_source, e)
                 source = fallback_source
@@ -239,9 +241,15 @@ class YouTubeDownloader:
                     "skip_download": True,
                     "ignore_no_formats_error": True,
                 }
-                info = await loop.run_in_executor(
-                    None, self._extract_info, url, fb
-                )
+                try:
+                    info = await loop.run_in_executor(
+                        None, self._extract_info, url, fb
+                    )
+                except Exception as e2:
+                    # fallback тоже упал — алертим и его
+                    if classify_error(str(e2)) != "unavailable":
+                        self._fire_source_failed(fallback_source, e2)
+                    raise
             else:
                 raise
 
