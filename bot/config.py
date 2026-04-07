@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # лимит файла (Local Bot API — 2 ГБ, обычный — 50 МБ)
     max_file_size: int = 2 * 1024 * 1024 * 1024  # 2 ГБ
 
+    # порог размера для балансировки прокси/WARP (МБ)
+    # видео < порога скачиваются через WARP (разгружаем прокси от мелких файлов)
+    # видео >= порога скачиваются через прокси (быстрый путь для HD)
+    small_video_threshold_mb: int = 30
+
     @property
     def admin_id_list(self) -> list[int]:
         """Парсит admin_ids из строки в список int"""

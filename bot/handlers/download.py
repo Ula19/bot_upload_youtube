@@ -180,6 +180,8 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
     quality = callback.data.replace("quality_", "")  # "360" или "720"
     data = await state.get_data()
     url = data.get("url")
+    qualities = data.get("qualities") or {}
+    expected_size_mb = int(qualities.get(quality, 0) or 0)
     await state.clear()
 
     # отвечаем на callback СРАЗУ (Telegram даёт 30 сек)
@@ -194,7 +196,8 @@ async def choose_quality(callback: CallbackQuery, state: FSMContext) -> None:
 
     format_key = f"video_{quality}"
     await _process_download(
-        callback.message, url, format_key, callback.from_user, lang, state
+        callback.message, url, format_key, callback.from_user, lang, state,
+        expected_size_mb=expected_size_mb,
     )
 
 
@@ -205,8 +208,12 @@ async def _process_download(
     user,
     lang: str = "ru",
     state: FSMContext | None = None,
+    expected_size_mb: int = 0,
 ) -> None:
-    """Скачивает и отправляет медиа"""
+    """Скачивает и отправляет медиа.
+    expected_size_mb используется для балансировки прокси/WARP:
+    маленькие видео идут через WARP, большие — через прокси.
+    """
     # проверяем кэш
     async with async_session() as session:
         await get_or_create_user(
@@ -250,10 +257,15 @@ async def _process_download(
         result = None
         try:
             if format_key == "audio":
-                result = await downloader.download_audio(url, on_progress)
+                # аудио всегда маленькое — через WARP
+                result = await downloader.download_audio(url, on_progress, prefer_warp=True)
             else:
                 quality = format_key.replace("video_", "")
-                result = await downloader.download_video(url, quality, on_progress)
+                # балансировка по размеру: маленькие → WARP, большие → прокси
+                prefer_warp = 0 < expected_size_mb < settings.small_video_threshold_mb
+                result = await downloader.download_video(
+                    url, quality, on_progress, prefer_warp=prefer_warp,
+                )
 
             file_id = await _send_media(message, result, status_msg, lang)
 

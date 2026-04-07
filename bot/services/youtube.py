@@ -6,6 +6,7 @@ Fallback: cookies → ios/android (если WARP упал).
 import asyncio
 import logging
 import os
+import random
 import tempfile
 import time
 from dataclasses import dataclass
@@ -197,8 +198,13 @@ class YouTubeDownloader:
 
         t_start = time.monotonic()
 
-        # primary
-        if self._proxy_first:
+        # Балансировка 50/50 между прокси и WARP для get_info.
+        # Снижает footprint прокси у YouTube API → меньше риск блокировки IP.
+        # Если прокси не настроен — всегда через WARP.
+        use_proxy_first = self._proxy_first and random.random() < 0.5
+        routing = "balanced"
+
+        if use_proxy_first:
             primary_source = "proxy"
             primary_opts = self._proxy_opts()
             fallback_source = "warp"
@@ -207,7 +213,7 @@ class YouTubeDownloader:
             primary_source = "warp"
             primary_opts = self._warp_opts()
             fallback_source = "proxy"
-            fallback_opts = self._proxy_fallback_opts() if self._proxy else None
+            fallback_opts = self._proxy_opts() if self._proxy else None
 
         ydl_opts = {
             **primary_opts,
@@ -240,7 +246,10 @@ class YouTubeDownloader:
                 raise
 
         elapsed = time.monotonic() - t_start
-        logger.info("[METRIC] get_info %.2fs source=%s url=%s", elapsed, source, url)
+        logger.info(
+            "[METRIC] get_info %.2fs source=%s routing=%s url=%s",
+            elapsed, source, routing, url,
+        )
 
         qualities = self._parse_qualities(info)
 
@@ -300,24 +309,38 @@ class YouTubeDownloader:
     async def download_video(
         self, url: str, quality: str = "720",
         progress_callback: ProgressCallback = None,
+        prefer_warp: bool = False,
     ) -> DownloadResult:
         """Скачивает видео.
-        Порядок попыток зависит от _proxy_first:
-          - SOCKS5 прокси: proxy → warp → proxy+cookies → proxy+ios
-          - WARP: warp → proxy+cookies → proxy+ios
+        Порядок попыток:
+          - prefer_warp=False (дефолт, большие видео): proxy → warp → proxy+cookies → proxy+ios
+          - prefer_warp=True (маленькие видео): warp → proxy → proxy+cookies → proxy+ios
         """
         self._cleanup_old_files()
         t_start = time.monotonic()
 
+        # определяем primary и alt fallback в зависимости от prefer_warp
+        use_proxy_primary = self._proxy_first and not prefer_warp
+        routing = "hd" if use_proxy_primary else "small"
+
         # 1. PRIMARY
-        primary_opts = self._proxy_opts() if self._proxy_first else self._warp_opts()
-        primary_name = "proxy" if self._proxy_first else "warp"
+        if use_proxy_primary:
+            primary_opts = self._proxy_opts()
+            primary_name = "proxy"
+            alt_opts = self._warp_opts()
+            alt_name = "warp"
+        else:
+            primary_opts = self._warp_opts()
+            primary_name = "warp"
+            alt_opts = self._proxy_opts() if self._proxy else None
+            alt_name = "proxy"
+
         try:
             result = await self._download_with_quality(
                 url, quality, progress_callback, opts=primary_opts
             )
             checked = self._check_size(result)
-            self._log_download_metric("download_video", t_start, primary_name, quality, checked.file_path)
+            self._log_download_metric("download_video", t_start, primary_name, quality, checked.file_path, routing)
             return checked
         except Exception as e:
             logger.warning("%s не сработал: %s", primary_name, e)
@@ -326,19 +349,19 @@ class YouTubeDownloader:
             if classify_error(str(e)) == "unavailable":
                 raise
 
-        # 2. FALLBACK к WARP (если primary был proxy)
-        if self._proxy_first:
+        # 2. FALLBACK на альтернативный источник (warp ↔ proxy)
+        if alt_opts:
             try:
-                logger.info("Fallback: WARP")
+                logger.info("Fallback: %s", alt_name)
                 result = await self._download_with_quality(
-                    url, quality, progress_callback, opts=self._warp_opts()
+                    url, quality, progress_callback, opts=alt_opts
                 )
                 checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, "warp", quality, checked.file_path)
+                self._log_download_metric("download_video", t_start, alt_name, quality, checked.file_path, routing)
                 return checked
             except Exception as e:
-                logger.warning("WARP не сработал: %s", e)
-                self._fire_source_failed("warp", e)
+                logger.warning("%s не сработал: %s", alt_name, e)
+                self._fire_source_failed(alt_name, e)
 
         # 3. резидентный прокси + cookies
         if self.has_cookies() and self._proxy:
@@ -348,7 +371,7 @@ class YouTubeDownloader:
                     url, quality, progress_callback, opts=self._proxy_cookies_opts()
                 )
                 checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, "proxy+cookies", quality, checked.file_path)
+                self._log_download_metric("download_video", t_start, "proxy+cookies", quality, checked.file_path, routing)
                 return checked
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали: %s", e)
@@ -362,7 +385,7 @@ class YouTubeDownloader:
                     url, quality, progress_callback, opts=self._proxy_fallback_opts()
                 )
                 checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path)
+                self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path, routing)
                 return checked
             except Exception as e:
                 logger.warning("Прокси+ios не сработали: %s", e)
@@ -371,7 +394,7 @@ class YouTubeDownloader:
         raise RuntimeError("download_failed")
 
     def _log_download_metric(
-        self, op: str, t_start: float, source: str, quality: str, file_path: str
+        self, op: str, t_start: float, source: str, quality: str, file_path: str, routing: str = "default",
     ) -> None:
         elapsed = time.monotonic() - t_start
         try:
@@ -380,24 +403,38 @@ class YouTubeDownloader:
             size_mb = 0
         speed = size_mb / elapsed if elapsed > 0 else 0
         logger.info(
-            "[METRIC] %s %.2fs source=%s quality=%s size=%.1fMB speed=%.1fMB/s",
-            op, elapsed, source, quality, size_mb, speed,
+            "[METRIC] %s %.2fs source=%s routing=%s quality=%s size=%.1fMB speed=%.1fMB/s",
+            op, elapsed, source, routing, quality, size_mb, speed,
         )
 
     async def download_audio(
         self, url: str,
         progress_callback: ProgressCallback = None,
+        prefer_warp: bool = True,
     ) -> DownloadResult:
-        """Скачивает аудио. Порядок попыток зависит от _proxy_first."""
+        """Скачивает аудио. По умолчанию prefer_warp=True — аудио маленькое,
+        разгружаем прокси от мелких файлов."""
         self._cleanup_old_files()
         t_start = time.monotonic()
 
+        use_proxy_primary = self._proxy_first and not prefer_warp
+        routing = "hd" if use_proxy_primary else "small"
+
         # 1. PRIMARY
-        primary_opts = self._proxy_opts() if self._proxy_first else self._warp_opts()
-        primary_name = "proxy" if self._proxy_first else "warp"
+        if use_proxy_primary:
+            primary_opts = self._proxy_opts()
+            primary_name = "proxy"
+            alt_opts = self._warp_opts()
+            alt_name = "warp"
+        else:
+            primary_opts = self._warp_opts()
+            primary_name = "warp"
+            alt_opts = self._proxy_opts() if self._proxy else None
+            alt_name = "proxy"
+
         try:
             result = await self._do_download_audio(url, progress_callback, opts=primary_opts)
-            self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path)
+            self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path, routing)
             return result
         except Exception as e:
             logger.warning("%s не сработал (аудио): %s", primary_name, e)
@@ -406,23 +443,23 @@ class YouTubeDownloader:
             if classify_error(str(e)) == "unavailable":
                 raise
 
-        # 2. FALLBACK к WARP (если primary был proxy)
-        if self._proxy_first:
+        # 2. FALLBACK на альтернативный источник
+        if alt_opts:
             try:
-                logger.info("Fallback: WARP (аудио)")
-                result = await self._do_download_audio(url, progress_callback, opts=self._warp_opts())
-                self._log_download_metric("download_audio", t_start, "warp", "m4a", result.file_path)
+                logger.info("Fallback: %s (аудио)", alt_name)
+                result = await self._do_download_audio(url, progress_callback, opts=alt_opts)
+                self._log_download_metric("download_audio", t_start, alt_name, "m4a", result.file_path, routing)
                 return result
             except Exception as e:
-                logger.warning("WARP не сработал (аудио): %s", e)
-                self._fire_source_failed("warp", e)
+                logger.warning("%s не сработал (аудио): %s", alt_name, e)
+                self._fire_source_failed(alt_name, e)
 
         # 3. резидентный прокси + cookies
         if self.has_cookies() and self._proxy:
             try:
                 logger.info("Fallback: прокси + cookies (аудио)")
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
-                self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path)
+                self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path, routing)
                 return result
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали (аудио): %s", e)
@@ -433,7 +470,7 @@ class YouTubeDownloader:
             try:
                 logger.info("Fallback: прокси + ios/android (аудио)")
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
-                self._log_download_metric("download_audio", t_start, "proxy+ios", "m4a", result.file_path)
+                self._log_download_metric("download_audio", t_start, "proxy+ios", "m4a", result.file_path, routing)
                 return result
             except Exception as e:
                 logger.warning("Прокси+ios не сработали (аудио): %s", e)
