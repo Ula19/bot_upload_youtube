@@ -25,7 +25,7 @@ from bot.keyboards.inline import (
     get_format_keyboard,
     get_quality_keyboard,
 )
-from bot.services.youtube import FileTooLargeError, downloader
+from bot.services.youtube import FileTooLargeError, classify_error, downloader
 from bot.utils.helpers import clean_youtube_url, is_youtube_url
 from bot.config import settings
 from bot.emojis import E
@@ -36,12 +36,18 @@ router = Router()
 # минимальный интервал обновления прогресса (Telegram лимит ~30 ред/мин)
 PROGRESS_UPDATE_INTERVAL = 4
 
-# чтобы не спамить админа — уведомляем только один раз
-_admin_notified = False
-
 # троттлинг алертов о fallback (одно сообщение раз в N секунд)
 _FALLBACK_ALERT_THROTTLE = 600  # 10 минут
 _last_fallback_alert: dict[str, float] = {}
+
+# человеко-понятные подписи к категориям ошибок
+_ERROR_CATEGORY_LABELS = {
+    "cookies_expired": "Cookies протухли — обнови через /update_cookies",
+    "ip_blocked": "YouTube заблокировал IP — нужна ротация прокси",
+    "network": "Сетевая ошибка (таймаут/нет связи)",
+    "unavailable": "Видео недоступно (гео-блок/приват)",
+    "unknown": "Неизвестная ошибка",
+}
 
 # максимум 30 одновременных скачиваний — сервер мощный (8ГБ ОЗУ, 6.4ГБ свободно)
 _download_semaphore = asyncio.Semaphore(30)
@@ -249,10 +255,6 @@ async def _process_download(
 
             file_id = await _send_media(message, result, status_msg, lang)
 
-            # если сработал fallback — уведомляем админа (один раз)
-            if downloader.auth_failed:
-                await _notify_admin_auth_failed(message.bot)
-
             # сохраняем в кэш
             if file_id:
                 actual_format_key = result.format_key or format_key
@@ -443,53 +445,31 @@ def _on_source_failed(source: str, error: str) -> None:
 
 
 async def _send_fallback_alert(source: str, error: str) -> None:
-    """Отправляет алерт админу о падении источника. С троттлингом."""
+    """Отправляет алерт админу о падении источника. С троттлингом и классификацией ошибки."""
     now = time.time()
-    last = _last_fallback_alert.get(source, 0)
+    # ключ троттлинга — (источник, категория), чтобы разные типы ошибок не глушили друг друга
+    category = classify_error(error)
+    throttle_key = f"{source}:{category}"
+    last = _last_fallback_alert.get(throttle_key, 0)
     if now - last < _FALLBACK_ALERT_THROTTLE:
         return
-    _last_fallback_alert[source] = now
+    _last_fallback_alert[throttle_key] = now
 
     # обрезаем длинный traceback
     short_error = error[:300] + "..." if len(error) > 300 else error
+    category_label = _ERROR_CATEGORY_LABELS.get(category, category)
 
     text = (
         f"{E['warning']} <b>Источник упал!</b>\n\n"
         f"<b>Источник:</b> {source}\n"
-        f"<b>Ошибка:</b> <code>{short_error}</code>\n\n"
-        f"Проверь логи и состояние прокси/WARP."
+        f"<b>Категория:</b> {category_label}\n"
+        f"<b>Ошибка:</b> <code>{short_error}</code>"
     )
 
     for admin_id in settings.admin_id_list:
         try:
             await _bot_ref.send_message(admin_id, text, parse_mode="HTML")
-            logger.info("Админ %s уведомлён о падении %s", admin_id, source)
-        except Exception as e:
-            logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
-
-
-async def _notify_admin_auth_failed(bot) -> None:
-    """Уведомляет админа что cookies протухли (один раз)"""
-    global _admin_notified
-    if _admin_notified:
-        return
-    _admin_notified = True
-
-    text = (
-        f"{E['warning']} <b>Cookies протухли!</b>\n\n"
-        "Бот переключился на ios/android.\n"
-        "Качество видео снижено (360-480p).\n\n"
-        "Для восстановления 720p:\n"
-        "1. Откройте Firefox в приватном режиме\n"
-        "2. Войдите в YouTube\n"
-        '3. Экспортируйте cookies расширением "Get cookies.txt LOCALLY"\n'
-        "4. Отправьте файл боту командой /update_cookies"
-    )
-
-    for admin_id in settings.admin_id_list:
-        try:
-            await bot.send_message(admin_id, text, parse_mode="HTML")
-            logger.info("Админ %s уведомлён о протухших cookies", admin_id)
+            logger.info("Админ %s уведомлён о падении %s (%s)", admin_id, source, category)
         except Exception as e:
             logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
 

@@ -50,20 +50,29 @@ class DownloadResult:
 ProgressCallback = Callable[[float, float, int], None] | None
 
 
-# ошибки при которых cookies протухли → fallback на ios/android
-_AUTH_ERRORS = [
-    "Sign in to confirm",
-    "confirm you're not a bot",
-    "This request was detected as a bot",
-    "Login required",
-    "cookies",
-]
+def classify_error(error_msg: str) -> str:
+    """Классифицирует ошибку yt-dlp в категорию для осмысленных алертов.
+    Возвращает: 'cookies_expired', 'ip_blocked', 'network', 'unavailable', 'unknown'.
+    """
+    msg = error_msg.lower()
+    # IP заблокирован ютубом (важно проверять ДО cookies, т.к. "bot" бывает в обоих)
+    if "403" in msg or "forbidden" in msg or "detected as a bot" in msg:
+        return "ip_blocked"
+    # cookies протухли
+    if "login required" in msg or "sign in to confirm" in msg or "cookies" in msg:
+        return "cookies_expired"
+    # сетевые проблемы
+    if "timeout" in msg or "connection" in msg or "unreachable" in msg or "socks" in msg:
+        return "network"
+    # видео недоступно (гео-блок, приват и т.п.)
+    if "unavailable" in msg or "private" in msg or "not available" in msg:
+        return "unavailable"
+    return "unknown"
 
 
 class YouTubeDownloader:
-    """Скачивает YouTube через yt-dlp + Cloudflare WARP.
-    Основной метод — WARP (все качества без cookies).
-    Fallback — cookies или ios/android.
+    """Скачивает YouTube через yt-dlp + резидентный SOCKS5 прокси (primary) или WARP.
+    Fallback chain: primary → fallback → proxy+cookies → proxy+ios/android.
     """
 
     _COOKIES_PATH = "/app/cookies/cookies.txt"
@@ -71,7 +80,6 @@ class YouTubeDownloader:
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
-        self.auth_failed = False
         # SOCKS5 резидентный прокси → primary, WARP → fallback
         self._proxy_first = bool(self._proxy and self._proxy.startswith("socks5://"))
         # callback для уведомления админа когда источник упал
@@ -180,9 +188,6 @@ class YouTubeDownloader:
             },
         }
         return opts
-
-    def _is_auth_error(self, error_msg: str) -> bool:
-        return any(err in error_msg for err in _AUTH_ERRORS)
 
     async def get_info(self, url: str) -> VideoInfo:
         """Получает метаданные видео.
@@ -330,7 +335,7 @@ class YouTubeDownloader:
                 self._fire_source_failed("warp", e)
 
         # 3. резидентный прокси + cookies
-        if self.has_cookies() and not self.auth_failed and self._proxy:
+        if self.has_cookies() and self._proxy:
             try:
                 logger.info("Fallback: резидентный прокси + cookies")
                 result = await self._download_with_quality(
@@ -340,8 +345,6 @@ class YouTubeDownloader:
                 self._log_download_metric("download_video", t_start, "proxy+cookies", quality, checked.file_path)
                 return checked
             except Exception as e:
-                if self._is_auth_error(str(e)):
-                    self.auth_failed = True
                 logger.warning("Прокси+cookies не сработали: %s", e)
                 self._fire_source_failed("proxy+cookies", e)
 
@@ -406,15 +409,13 @@ class YouTubeDownloader:
                 self._fire_source_failed("warp", e)
 
         # 3. резидентный прокси + cookies
-        if self.has_cookies() and not self.auth_failed and self._proxy:
+        if self.has_cookies() and self._proxy:
             try:
                 logger.info("Fallback: прокси + cookies (аудио)")
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
                 self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path)
                 return result
             except Exception as e:
-                if self._is_auth_error(str(e)):
-                    self.auth_failed = True
                 logger.warning("Прокси+cookies не сработали (аудио): %s", e)
                 self._fire_source_failed("proxy+cookies", e)
 

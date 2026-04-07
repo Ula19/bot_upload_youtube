@@ -89,9 +89,7 @@ async def admin_cookies_info(callback: CallbackQuery) -> None:
     lang = await _get_lang(callback.from_user.id)
 
     # определяем статус cookies
-    if downloader.auth_failed:
-        status = t("admin.cookies_expired", lang)
-    elif downloader.has_cookies():
+    if downloader.has_cookies():
         status = t("admin.cookies_active", lang)
     else:
         status = t("admin.cookies_missing", lang)

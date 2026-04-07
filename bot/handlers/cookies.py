@@ -12,7 +12,6 @@ from aiogram.types import Message
 
 from bot.config import settings
 from bot.emojis import E
-from bot.services.youtube import downloader
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -72,9 +71,6 @@ async def process_cookies_file(message: Message, state: FSMContext) -> None:
         else:
             # обычный Bot API — скачиваем
             await message.bot.download_file(file.file_path, COOKIES_PATH)
-
-        # сбрасываем флаг auth_failed чтобы бот попробовал новые cookies
-        downloader.auth_failed = False
 
         # проверяем что файл валидный (содержит нужные строки)
         with open(COOKIES_PATH, "r") as f:
