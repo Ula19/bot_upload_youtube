@@ -222,6 +222,9 @@ class YouTubeDownloader:
                 None, self._extract_info, url, ydl_opts
             )
         except Exception as e:
+            # ошибка на стороне контента — fallback'и не помогут
+            if classify_error(str(e)) == "unavailable":
+                raise
             if fallback_opts:
                 logger.warning("%s не дал инфо, пробую %s: %s", primary_source, fallback_source, e)
                 source = fallback_source
@@ -319,6 +322,9 @@ class YouTubeDownloader:
         except Exception as e:
             logger.warning("%s не сработал: %s", primary_name, e)
             self._fire_source_failed(primary_name, e)
+            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
+            if classify_error(str(e)) == "unavailable":
+                raise
 
         # 2. FALLBACK к WARP (если primary был proxy)
         if self._proxy_first:
@@ -396,6 +402,9 @@ class YouTubeDownloader:
         except Exception as e:
             logger.warning("%s не сработал (аудио): %s", primary_name, e)
             self._fire_source_failed(primary_name, e)
+            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
+            if classify_error(str(e)) == "unavailable":
+                raise
 
         # 2. FALLBACK к WARP (если primary был proxy)
         if self._proxy_first:
