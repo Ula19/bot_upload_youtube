@@ -51,6 +51,11 @@ class DownloadResult:
 ProgressCallback = Callable[[float, float, int], None] | None
 
 
+class FileTooLargeError(Exception):
+    """Файл превышает лимит Telegram (2 ГБ)"""
+    pass
+
+
 def classify_error(error_msg: str) -> str:
     """Классифицирует ошибку yt-dlp в категорию для осмысленных алертов.
     Возвращает: 'cookies_expired', 'ip_blocked', 'network', 'unavailable', 'unknown'.
@@ -350,6 +355,9 @@ class YouTubeDownloader:
             checked = self._check_size(result)
             self._log_download_metric("download_video", t_start, primary_name, quality, checked.file_path, routing)
             return checked
+        except FileTooLargeError:
+            # размер не починится сменой источника — пробрасываем сразу
+            raise
         except Exception as e:
             logger.warning("%s не сработал: %s", primary_name, e)
             self._fire_source_failed(primary_name, e)
@@ -367,6 +375,8 @@ class YouTubeDownloader:
                 checked = self._check_size(result)
                 self._log_download_metric("download_video", t_start, alt_name, quality, checked.file_path, routing)
                 return checked
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("%s не сработал: %s", alt_name, e)
                 self._fire_source_failed(alt_name, e)
@@ -381,6 +391,8 @@ class YouTubeDownloader:
                 checked = self._check_size(result)
                 self._log_download_metric("download_video", t_start, "proxy+cookies", quality, checked.file_path, routing)
                 return checked
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали: %s", e)
                 self._fire_source_failed("proxy+cookies", e)
@@ -395,6 +407,8 @@ class YouTubeDownloader:
                 checked = self._check_size(result)
                 self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path, routing)
                 return checked
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("Прокси+ios не сработали: %s", e)
                 self._fire_source_failed("proxy+ios", e)
@@ -625,10 +639,6 @@ class YouTubeDownloader:
                 logger.info("Удалён: %s", path)
         except OSError as e:
             logger.warning("Не удалось удалить файл: %s", e)
-
-
-class FileTooLargeError(Exception):
-    pass
 
 
 # глобальный экземпляр

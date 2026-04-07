@@ -103,13 +103,33 @@ async def handle_youtube_link(message: Message, state: FSMContext) -> None:
             )
             return
 
+        # префлайт-фильтр: выкидываем качества с оценкой > лимита
+        # (оценка yt-dlp обычно завышена, порог с запасом)
+        # размер 0 = неизвестно → оставляем, юзер сам разберётся
+        max_mb = settings.max_quality_size_mb
+        filtered_qualities = {
+            q: size for q, size in (info.qualities or {}).items()
+            if size == 0 or size <= max_mb
+        }
+
+        # все качества оказались слишком большими → предлагаем только аудио
+        if info.qualities and not filtered_qualities:
+            await state.set_state(DownloadStates.waiting_format)
+            await state.update_data(url=clean_url)
+            await status_msg.edit_text(
+                t("error.too_large_suggest_audio", lang),
+                reply_markup=get_audio_suggest_keyboard(lang),
+                parse_mode="HTML",
+            )
+            return
+
         # сохраняем URL и инфо в FSM
         await state.set_state(DownloadStates.waiting_format)
         await state.update_data(
             url=clean_url,
             title=info.title,
             duration=info.duration,
-            qualities=info.qualities,
+            qualities=filtered_qualities,
             msg_id=message.message_id,
         )
 

@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # видео >= порога скачиваются через прокси (быстрый путь для HD)
     small_video_threshold_mb: int = 30
 
+    # префлайт-фильтр: качества с оценкой > этого порога не показываются юзеру
+    # (оценка yt-dlp обычно завышена, поэтому 2300 даёт запас ~15% от реального 2 ГБ лимита)
+    max_quality_size_mb: int = 2300
+
     @property
     def admin_id_list(self) -> list[int]:
         """Парсит admin_ids из строки в список int"""
