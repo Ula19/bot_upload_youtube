@@ -6,7 +6,6 @@ Fallback: cookies → ios/android (если WARP упал).
 import asyncio
 import logging
 import os
-import random
 import tempfile
 import time
 from dataclasses import dataclass
@@ -61,11 +60,19 @@ def classify_error(error_msg: str) -> str:
     Возвращает: 'cookies_expired', 'ip_blocked', 'network', 'unavailable', 'unknown'.
     """
     msg = error_msg.lower()
-    # IP заблокирован ютубом (важно проверять ДО cookies, т.к. "bot" бывает в обоих)
-    if "403" in msg or "forbidden" in msg or "detected as a bot" in msg:
+    # IP заблокирован / YouTube задетектил бота
+    # "sign in to confirm you're not a bot" — это именно бот-детект, а не протухшие куки
+    # (на WARP/прокси мы вообще без куки ходим, так что "cookies_expired" там невозможен)
+    if (
+        "403" in msg
+        or "forbidden" in msg
+        or "not a bot" in msg
+        or "sign in to confirm" in msg
+        or "detected as a bot" in msg
+    ):
         return "ip_blocked"
-    # cookies протухли
-    if "login required" in msg or "sign in to confirm" in msg or "cookies" in msg:
+    # cookies протухли (только когда реально использовались куки)
+    if "login required" in msg or "cookies" in msg:
         return "cookies_expired"
     # сетевые проблемы
     if "timeout" in msg or "connection" in msg or "unreachable" in msg or "socks" in msg:
@@ -203,13 +210,14 @@ class YouTubeDownloader:
 
         t_start = time.monotonic()
 
-        # Балансировка 50/50 между прокси и WARP для get_info.
-        # Снижает footprint прокси у YouTube API → меньше риск блокировки IP.
-        # Если прокси не настроен — всегда через WARP.
-        use_proxy_first = self._proxy_first and random.random() < 0.5
-        routing = "balanced"
+        # get_info всегда через резидентный SOCKS5 → полный список форматов.
+        # На датацентровые IP WARP YouTube отдаёт урезанный список качеств,
+        # из-за чего юзер видел разный набор кнопок при повторных запросах.
+        # Балансировка остаётся только для скачиваний (download_video/audio),
+        # где трафик тяжёлый и экономия на прокси реально важна.
+        routing = "proxy_first"
 
-        if use_proxy_first:
+        if self._proxy_first:
             primary_source = "proxy"
             primary_opts = self._proxy_opts()
             fallback_source = "warp"
