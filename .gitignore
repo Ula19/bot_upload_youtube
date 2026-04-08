@@ -30,15 +30,12 @@ downloads/
 .claude/
 *.db
 
-# Markdown не отслеживаем (кроме README.md)
-AGENTS.md
-PROJECT_LOG.md
-DEPLOY.md
+# Markdown не отслеживаем (кроме README.md) — правило №25 из AGENTS.md
+*.md
+!README.md
 
 # тестовые скрипты
 test_local.py
 
 # alembic (если не нужно отслеживать)
 # alembic/versions/*.py
-SECURITY_AUDIT.md
-CLAUDE.md
