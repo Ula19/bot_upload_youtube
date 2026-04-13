@@ -21,6 +21,8 @@ services:
       - ./cookies:/app/cookies
       # доступ к файлам Local Bot API (для /update_cookies)
       - bot-api-data:/var/lib/telegram-bot-api
+      # Docker socket — для перезапуска WARP при блокировке IP
+      - /var/run/docker.sock:/var/run/docker.sock
 
 
   # Local Bot API — файлы до 2 ГБ без ограничений

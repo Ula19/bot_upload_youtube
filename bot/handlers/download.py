@@ -512,6 +512,14 @@ async def _send_fallback_alert(source: str, error: str) -> None:
     # не алертим для ошибок на стороне юзера/контента (приват, гео-блок и т.п.)
     if category in _SILENT_CATEGORIES:
         return
+
+    # WARP заблокирован YouTube — перезапускаем для получения нового IP
+    if source == "warp" and category == "ip_blocked":
+        from bot.utils.docker import restart_warp
+        restarted = await restart_warp()
+        if restarted:
+            logger.info("WARP перезапущен после ip_blocked")
+
     throttle_key = f"{source}:{category}"
     last = _last_fallback_alert.get(throttle_key, 0)
     if now - last < _FALLBACK_ALERT_THROTTLE:
@@ -522,11 +530,16 @@ async def _send_fallback_alert(source: str, error: str) -> None:
     short_error = error[:300] + "..." if len(error) > 300 else error
     category_label = _ERROR_CATEGORY_LABELS.get(category, category)
 
+    warp_note = ""
+    if source == "warp" and category == "ip_blocked":
+        warp_note = "\n\n♻️ <i>WARP контейнер перезапущен для смены IP</i>"
+
     text = (
         f"{E['warning']} <b>Источник упал!</b>\n\n"
         f"<b>Источник:</b> {source}\n"
         f"<b>Категория:</b> {category_label}\n"
         f"<b>Ошибка:</b> <code>{short_error}</code>"
+        f"{warp_note}"
     )
 
     for admin_id in settings.admin_id_list:
