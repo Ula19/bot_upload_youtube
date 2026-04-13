@@ -96,6 +96,19 @@ async def main() -> None:
                     pass
             if cleaned:
                 logger.info("Фоновая очистка: удалено %d временных файлов из /tmp/yt_bot", cleaned)
+            # чистим файлы Local Bot API (старше 1 часа)
+            # bot-api складывает файлы в /var/lib/telegram-bot-api/<hash>/
+            bot_api_cutoff = now - 60 * 60
+            bot_api_cleaned = 0
+            for f in glob.glob("/var/lib/telegram-bot-api/**/*", recursive=True):
+                try:
+                    if os.path.isfile(f) and os.path.getmtime(f) < bot_api_cutoff:
+                        os.remove(f)
+                        bot_api_cleaned += 1
+                except OSError:
+                    pass
+            if bot_api_cleaned:
+                logger.info("Фоновая очистка: удалено %d файлов Local Bot API", bot_api_cleaned)
 
     @dp.startup()
     async def on_startup() -> None:
